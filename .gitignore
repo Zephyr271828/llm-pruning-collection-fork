@@ -8,11 +8,11 @@ __pycache__
 *.safetensors
 
 checkpoints/
-datasets
-**/**/llm_weights/
-**/logs/
-**/**/logs/
-**/**/outputs/
-**/**/tmp/ 
+datasets/
+!pruning/wanda/lm-evaluation-harness/lm_eval/datasets/
+llm_weights/
+logs/
+outputs/
+tmp/ 
 
 pruning/llmshearing/llmshearing/data/redpajama/for_prune/*

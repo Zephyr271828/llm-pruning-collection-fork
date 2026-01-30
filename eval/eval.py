@@ -183,17 +183,6 @@ def get_ppl_enc(task, tokenizer):
         )
         text_column = "text"
         testenc = tokenizer.encode(" ".join(dataset[:8000][text_column]), return_tensors='pt', add_special_tokens=True)
-    # elif task == 'dclm':
-    #     dataset = load_dataset(
-    #         'json', 
-    #         # data_files="/vast/yx3038/datasets/dclm/dclm_baseline_1.0_shuffled/dclm_baseline_1.0.val.jsonl",
-    #         # data_files="/vast/yx3038/datasets/dclm/dclm_baseline_1.0_shuffled/dclm_baseline_1.0.chunk.00.jsonl",
-    #         data_files="/n/fs/vision-mix/yx1168/datasets/dclm/dclm_baseline_1.0.val.jsonl",
-    #         split="train",
-    #         verification_mode="no_checks",
-    #     )
-    #     text_column = "text"
-    #     testenc = tokenizer.encode(" ".join(dataset[:1400][text_column]), return_tensors='pt', add_special_tokens=True)
     else:
         raise NotImplementedError(f"Unsupported task: {task}")
     return testenc

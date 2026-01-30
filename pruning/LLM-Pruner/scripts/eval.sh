@@ -1,21 +1,5 @@
 #!/bin/bash
 
-#SBATCH --job-name=eval_%j
-#SBATCH --output=logs/eval_%j.out
-#SBATCH --error=logs/eval_%j.err
-
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=128GB
-#SBATCH --time=12:00:00
-#SBATCH --gres=gpu:1
-#SBATCH --exclude=neu306
-
-#SBATCH --mail-type=all
-#SBATCH --mail-user=yx1168@princeton.edu
-
 source $(conda info --base)/etc/profile.d/conda.sh
 conda activate llm-pruner
 

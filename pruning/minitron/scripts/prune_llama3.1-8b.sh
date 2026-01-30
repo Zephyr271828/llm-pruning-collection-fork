@@ -1,20 +1,5 @@
 #!/bin/bash
 
-#SBATCH --job-name=prune_llama3.1-8b_%j
-#SBATCH --output=logs/prune_llama3.1-8b_%j.out
-#SBATCH --error=logs/prune_llama3.1-8b_%j.err
-
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=128GB
-#SBATCH --time=8:00:00
-#SBATCH --gres=gpu:1
-
-#SBATCH --mail-type=all
-#SBATCH --mail-user=yx1168@princeton.edu
-
 set -euo pipefail
 
 source $(conda info --base)/etc/profile.d/conda.sh

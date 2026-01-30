@@ -1,24 +1,12 @@
 #!/bin/bash
 
-#SBATCH --job-name=pruning_%j
-#SBATCH --output=pruning_%j.out
-#SBATCH --error=pruning_%j.err
-
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=256GB
-#SBATCH --time=48:00:00
-#SBATCH --gres=gpu:4
-
 source /usr/local/anaconda3/2024.02/etc/profile.d/conda.sh
 conda activate llmshearing
 
 # pruning llama2 7b -> 2.7b or 1.3b
 
 # pruning llama2 7b -> 2.7b or 1.3b
-PROJ_DIR=/n/fs/vision-mix/yx1168/pruning/fms-llmshearing/llmshearing
+PROJ_DIR=
 LAUNCH_SCRIPT=${PROJ_DIR}/llmshearing/scripts/launch.sh
 DATA_DIR=${PROJ_DIR}/llmshearing/data/orig_data/for_prune
 OUTPUT_DIR=${PROJ_DIR}/ckpts/

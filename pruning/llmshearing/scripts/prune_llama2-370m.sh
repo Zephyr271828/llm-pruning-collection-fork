@@ -1,20 +1,5 @@
 #!/bin/bash
 
-#SBATCH --job-name=prune_370m_%j
-#SBATCH --output=logs/prune_370m_%j.out
-#SBATCH --error=logs/prune_370m_%j.err
-
-#SBATCH --nodes=4
-#SBATCH --ntasks-per-node=1
-
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=384GB
-#SBATCH --time=48:00:00
-#SBATCH --gres=gpu:4
-
-#SBATCH --mail-type=all
-#SBATCH --mail-user=yx1168@princeton.edu
-
 # pruning llama2 7b -> 2.7b or 1.3b or 370m
 
 set -euo pipefail
@@ -23,12 +8,12 @@ source /usr/local/anaconda3/2024.02/etc/profile.d/conda.sh
 conda activate llmshearing
 
 # Please specify the working folder
-PROJ_DIR=/n/fs/vision-mix/yx1168/pruning/fms-llmshearing/llmshearing
+PROJ_DIR=
 LAUNCH_SCRIPT=${PROJ_DIR}/llmshearing/scripts/launch.sh
-DATA_DIR=/n/fs/vision-mix/yx1168/pruning/fms-llmshearing/llmshearing/llmshearing/data/redpajama/for_prune
-OUTPUT_DIR=/n/fs/vision-mix/yx1168/pruning/ckpts/llmshearing
+DATA_DIR=$PROJ_DIR/llmshearing/data/redpajama/for_prune
+OUTPUT_DIR=
 TRAIN_SCRIPT=${PROJ_DIR}/llmshearing/train.py
-MODEL_PATH=/n/fs/vision-mix/yx1168/pruning/ckpts/llmshearing/Llama-2-7b-composer
+MODEL_PATH=$OUTPUT_DIR/Llama-2-7b-composer
 
 # Specify $PROJ_DIR in scripts/launch.sh and scripts/srun_launch.sh if using slurm
 

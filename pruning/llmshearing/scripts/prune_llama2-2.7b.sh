@@ -1,20 +1,5 @@
 #!/bin/bash
 
-#SBATCH --job-name=prune_2.7b_%j
-#SBATCH --output=logs/prune_2.7b_%j.out
-#SBATCH --error=logs/prune_2.7b_%j.err
-
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=384GB
-#SBATCH --time=1:00:00
-#SBATCH --gres=gpu:4
-
-#SBATCH --mail-type=all
-#SBATCH --mail-user=yx1168@princeton.edu
-
 # pruning llama2 7b -> 2.7b or 1.3b or 370m
 
 set -euo pipefail

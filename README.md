@@ -5,6 +5,8 @@
 1 Princeton. 2 NYU. 3 CMU.  
 [Paper (Coming soon!)]()
 
+---
+
 <!--  This repo is the codebase for our project "Rethinking the Value of Network Pruning for Large Language Models". It contains: -->
 This is a Jax-based repo for LLM Prunning, It contains:
 - the implementations of various LLM pruning methods of different granularity.

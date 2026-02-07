@@ -150,14 +150,15 @@ class ComposerMosaicLlama(ComposerModel):
             self.eval_metrics = evaluator_metrics
 
     def _compute_num_fwd_flops(self):
-        # Might not be correct for LLaMA structures
+        # Updated for GQA support
         n_params = sum(p.numel() for p in self.parameters())
         # the number of paramters is approximately the number of multiply-accumulates (MAC) in the network
         # each MAC has 2 FLOPs - we multiply by 2 ie 2 * n_param
         # this gets us FLOPs / token
         params_flops_per_token = 2 * n_params
         params_flops_per_seq = params_flops_per_token * self.model.cfg.max_seq_len
-        # there are 2 FLOPS per mac; there is A=Q*K^T and out=A*V ops (ie mult by 2)
+        # For GQA: attention FLOPs use n_heads for Q but computation is still O(n_heads * seq_len^2)
+        # because KV is expanded to match Q during computation
         attn_flops_per_seq = self.model.cfg.n_layers * 2 * 2 * (
             self.model.cfg.d_model * (self.model.cfg.max_seq_len**2))
         return params_flops_per_seq + attn_flops_per_seq
@@ -451,6 +452,9 @@ class LlamaAttention(nn.Module):
         
         self.d_model = cfg.d_model
         self.n_heads = cfg.n_heads
+        # Support for GQA (Grouped Query Attention) - used in Llama3
+        self.num_key_value_heads = cfg.get('num_key_value_heads', cfg.n_heads)
+        self.num_key_value_groups = self.n_heads // self.num_key_value_heads
         self.all_head_size = cfg.d_model
         self.head_dim = self.d_model // self.n_heads 
         self.pruned_heads = set()
@@ -465,8 +469,9 @@ class LlamaAttention(nn.Module):
         # fuse_splits = (cfg.d_model, 2 * cfg.d_model)
         # self.Wqkv._fused = (0, fuse_splits)  # type: ignore
         self.wq = nn.Linear(self.d_model, self.d_model, device=device, bias=False)
-        self.wk = nn.Linear(self.d_model, self.d_model, device=device, bias=False)
-        self.wv = nn.Linear(self.d_model, self.d_model, device=device, bias=False)
+        # For GQA: K and V use num_key_value_heads instead of n_heads
+        self.wk = nn.Linear(self.d_model, self.num_key_value_heads * self.head_dim, device=device, bias=False)
+        self.wv = nn.Linear(self.d_model, self.num_key_value_heads * self.head_dim, device=device, bias=False)
         
         self.attn_fn = flash_attn_fn if self.attn_impl == 'flash' else normal_attn_fn
 
@@ -509,7 +514,7 @@ class LlamaAttention(nn.Module):
             print(f"    Head hidden: {len(hidden_z)} -> {len(remaining_index)}") 
             half = next(self.wq.parameters()).dtype == torch.float16
             self.wk = prune_linear_layer(self.wk, remaining_index, dim=1)
-            self.wq= prune_linear_layer(self.wq, remaining_index, dim=1)
+            self.wq = prune_linear_layer(self.wq, remaining_index, dim=1)
             self.wv = prune_linear_layer(self.wv, remaining_index, dim=1)
             self.out_proj = prune_linear_layer(self.out_proj, remaining_index)
             if half:
@@ -560,6 +565,11 @@ class LlamaAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.n_heads = self.n_heads - len(heads)
+        # Update num_key_value_heads proportionally for GQA
+        if self.num_key_value_groups > 1:
+            self.num_key_value_heads = self.n_heads // self.num_key_value_groups
+        else:
+            self.num_key_value_heads = self.n_heads
         self.all_head_size = self.head_dim * self.n_heads
         self.pruned_heads = self.pruned_heads.union(heads)
             
@@ -603,8 +613,8 @@ class LlamaAttention(nn.Module):
 
         # b, s, d = query.shape
         query = rearrange(query, 'b s (h d) -> b h s d', h=self.n_heads)
-        key = rearrange(key, 'b s (h d) -> b h s d', h=self.n_heads)
-        value = rearrange(value, 'b s (h d) -> b h s d', h=self.n_heads)
+        key = rearrange(key, 'b s (h d) -> b h s d', h=self.num_key_value_heads)
+        value = rearrange(value, 'b s (h d) -> b h s d', h=self.num_key_value_heads)
         
         kv_seq_len = key.size(2)
         offset = 0
@@ -613,6 +623,11 @@ class LlamaAttention(nn.Module):
             kv_seq_len += offset
         cos, sin = self.rotary_emb(value, seq_len=kv_seq_len)
         query, key = apply_rotary_pos_emb(query, key, cos, sin, offset=offset)
+
+        # Expand K and V heads for GQA: repeat each KV head num_key_value_groups times
+        if self.num_key_value_groups > 1:
+            key = key.repeat_interleave(self.num_key_value_groups, dim=1)
+            value = value.repeat_interleave(self.num_key_value_groups, dim=1)
 
         offset = 0
         if past_key_value is not None:

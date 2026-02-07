@@ -1,0 +1,130 @@
+data_local: /path/to/your/data
+data_remote: # If blank, files must be present in data_local
+tokenizer_name: meta-llama/Meta-Llama-3-8B
+max_seq_len: 8192
+global_seed: 17
+
+# Run Name
+run_name: # If left blank, will be read from env var $COMPOSER_RUN_NAME
+
+model:
+  name: mosaic_llama3_8b 
+  path: /path/to/llama3-8b/checkpoint
+  init_device: "cpu" 
+  tokenizer_name: ${tokenizer_name}
+  d_model: 4096
+  n_heads: 32
+  num_key_value_heads: 8  # GQA: 4 query heads per KV head
+  n_layers: 32
+  intermediate_size: 14336
+  max_seq_len: ${max_seq_len}
+  vocab_size: 128256  # Llama3 has larger vocab
+  init_std: 0.02
+  attn_pdrop: 0.0
+  resid_pdrop: 0.0
+  emb_pdrop: 0.0
+  attn_impl: flash  # Recommended for GQA
+  rms_norm_eps: 1e-5
+  l0_module:
+    start_sparsity: 0.0
+    target_sparsity: 0.5
+    pruning_modules: ["head", "head_layer", "mlp", "intermediate"]
+    lagrangian_warmup_steps: 320ba 
+    target_model:
+      d_model: 2560
+      n_layers: 32
+      n_heads: 20
+      num_key_value_heads: 5  # Maintain 4:1 GQA ratio after pruning
+      intermediate_size: 8960 
+      vocab_size: 128256
+
+# Tokenizer
+tokenizer:
+  type: hftokenizer
+  args:
+    tokenizer_name: ${tokenizer_name}
+    max_seq_len: ${max_seq_len}
+
+# Dataloaders
+train_loader:
+  name: text
+  dataset:
+    local: ${data_local}
+    remote: ${data_remote}
+    split: train
+    shuffle: true
+    max_seq_len: ${max_seq_len}
+    shuffle_seed: ${global_seed}
+  drop_last: true
+  num_workers: 8
+
+eval_loader:
+  name: text
+  dataset:
+    local: ${data_local}
+    remote: ${data_remote}
+    split: val
+    shuffle: false
+    max_seq_len: ${max_seq_len}
+    shuffle_seed: ${global_seed}
+  drop_last: false
+  num_workers: 8
+
+# Optimization
+scheduler:
+  name: cosine_with_warmup
+  t_warmup: 100ba
+  alpha_f: 0.1
+
+optimizer:
+  name: decoupled_adamw
+  lr: 3.0e-4
+  betas:
+  - 0.9
+  - 0.95
+  eps: 1.0e-08
+  weight_decay: 0.0
+
+algorithms:
+  gradient_clipping:
+    clipping_type: norm
+    clipping_threshold: 1.0
+
+max_duration: 1000ba
+eval_interval: 100ba
+eval_first: false
+eval_subset_num_batches: -1
+global_train_batch_size: 256
+
+# System
+seed: ${global_seed}
+device_eval_batch_size: 8
+device_train_microbatch_size: 8
+precision: amp_bf16
+
+# Logging
+progress_bar: false
+log_to_console: true
+console_log_interval: 1ba
+
+callbacks:
+  speed_monitor:
+    window_size: 10
+  lr_monitor: {}
+
+# Checkpoint to local filesystem or remote object store
+save_interval: 500ba
+save_num_checkpoints_to_keep: 1  # Important, this cleans up checkpoints saved to DISK
+save_folder: ./{run_name}/checkpoints
+save_weights_only: false
+
+loggers:
+  wandb:
+    project: llmshearing-llama3
+    entity: # your wandb entity
+
+# GQA-specific notes:
+# - num_key_value_heads should be a divisor of n_heads
+# - GQA ratio = n_heads / num_key_value_heads (typically 4 for Llama3-8B)
+# - When pruning, maintain the GQA ratio in target_model
+# - Flash attention is highly recommended for efficient GQA computation

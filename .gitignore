@@ -9,6 +9,8 @@ __pycache__
 
 checkpoints/
 datasets
+!pruning/wanda/lm-evaluation-harness/lm_eval/datasets/
+!pruning/llmshearing/llmshearing/datasets
 **/**/llm_weights/
 **/logs/
 **/**/logs/

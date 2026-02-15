@@ -13,6 +13,7 @@ The repo is organized as follows:
 
 ```bash
 ├── pruning
+│   ├── FLAP # including Wanda-sp and FLAP
 │   ├── LLM-Pruner
 │   ├── llmshearing # sheared llama
 │   ├── minitron # including shortgpt

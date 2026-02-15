@@ -100,7 +100,7 @@ def check_sparsity(model):
     return float(count)/total_params 
 
 
-def prepare_calibration_input(model, dataloader, device, nsamples=128):
+def prepare_calibration_input(model, dataloader, device):
     """
     Prepare inputs for model calibration. 
     
@@ -108,7 +108,6 @@ def prepare_calibration_input(model, dataloader, device, nsamples=128):
         model (nn.Module): The model to prepare inputs for.
         dataloader (DataLoader): DataLoader object to fetch input data.
         device (torch.device): Device on which the model is loaded. 
-        nsamples (int): Number of calibration samples.
         
     Returns:
         inps (torch.Tensor): Input tensor for calibration.
@@ -124,7 +123,7 @@ def prepare_calibration_input(model, dataloader, device, nsamples=128):
         device = model.hf_device_map["model.embed_tokens"]
 
     dtype = next(iter(model.parameters())).dtype
-    inps = torch.zeros((nsamples, model.seqlen, model.config.hidden_size), dtype=dtype, device=device)
+    inps = torch.zeros((2048, model.seqlen, model.config.hidden_size), dtype=dtype, device=device)
     inps.requires_grad = False
     cache = {'i': 0, 'attention_mask': None, "position_ids": None}
 
@@ -324,7 +323,7 @@ def prune_flap(args, model, tokenizer, device=torch.device("cuda:0")):
     print("dataset loading complete")
     
     with torch.no_grad():
-        inps, outs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, device, nsamples=args.nsamples)
+        inps, outs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, device)
     layers = model.model.layers
 
     attn_metric_list, mlp_metric_list = [], []
@@ -461,7 +460,7 @@ def prune_wanda_sp(args, model, tokenizer, device=torch.device("cuda:0")):
     print("dataset loading complete")
     
     with torch.no_grad():
-        inps, outs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, device, nsamples=args.nsamples)
+        inps, outs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, device)
 
     layers = model.model.layers
     for i in range(len(layers)):

@@ -18,8 +18,8 @@ source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate flap
 
 # Set common variables
-model="meta-llama/Llama-3.1-8B"
-# model="/scratch/yx3038/cache/Llama-3.1-8B"
+# model="meta-llama/Llama-3.1-8B"
+model="/scratch/yx3038/cache/Llama-3.1-8B"
 
 # Define function to run python command
 run_python_command () {

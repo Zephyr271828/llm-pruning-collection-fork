@@ -14,6 +14,10 @@ bash scripts/prune_llama3.1_8b.sh
 ```
 
 ## Results
+Notably, the sequence length of eval data significantly affects the perplexity. Generally, if the sequence length is identical with the model's `max_position_embeddings` (4096 for Llama-2-7B, 8192 for Llama-3.1-8B), the perplexity will be much lower. However, in this section we follow the original setups in the paper and set sequence length to 2048.
+
+Notably, the results we obtained on Llama-2-7B are slightly worse than the original paper, yet we have made no adjustments to the codebase at all.
+
 Base Model=Llama2-7B
 | Method | Ratio | WikiText2(Tested) | WikiText2(Paper) |
 |:--:|:--:|:--:|:--:|

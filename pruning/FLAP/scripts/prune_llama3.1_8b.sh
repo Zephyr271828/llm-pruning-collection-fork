@@ -18,8 +18,8 @@ source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate flap
 
 # Set common variables
-# model="meta-llama/Llama-3.1-8B"
-model="/scratch/yx3038/cache/Llama-3.1-8B"
+model="meta-llama/Llama-3.1-8B"
+# model="/scratch/yx3038/cache/Llama-3.1-8B"
 
 # Define function to run python command
 run_python_command () {
@@ -42,11 +42,17 @@ run_python_command "flap" 0.2 -1 "WIFV" "AL-AM"
 run_python_command "flap" 0.3 -1 "WIFV" "AL-AM" 
 run_python_command "flap" 0.5 -1 "WIFV" "AL-AM" 
 
+# llama3.1-8b with flap pruning method (p=0.2/0.3/0.5, uniform in all layers)
+echo "Running with flap pruning method"
+# run_python_command "flap" 0.2 -1 "WIFV" "UL-UM"
+# run_python_command "flap" 0.3 -1 "WIFV" "UL-UM"
+# run_python_command "flap" 0.5 -1 "WIFV" "UL-UM"
+
 # # llama-7b with wanda-sp pruning method (p=0.2/0.3/0.5, uniform in all layers)
 # echo "Running with wanda-sp pruning method"
-# run_python_command "wanda_sp" 0.2 -1 N/A N/A
-# run_python_command "wanda_sp" 0.3 -1 N/A N/A 
-# run_python_command "wanda_sp" 0.5 -1 N/A N/A 
+run_python_command "wanda_sp" 0.2 -1 N/A N/A
+run_python_command "wanda_sp" 0.3 -1 N/A N/A 
+run_python_command "wanda_sp" 0.5 -1 N/A N/A 
 
 # # llama-7b with mag-sp pruning method (p=0.2/0.3/0.5, uniform in all layers)
 # echo "Running with magnitude pruning method"

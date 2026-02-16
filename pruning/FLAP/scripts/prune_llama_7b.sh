@@ -19,7 +19,7 @@ conda activate flap
 
 # Set common variables
 model="decapoda-research/llama-7b-hf"
-model="/scratch/yx3038/cache/decapoda-research-llama-7B-hf"
+# model="/scratch/yx3038/cache/decapoda-research-llama-7B-hf"
 cuda_device=${1:-0}
 
 PROJ_DIR=$(pwd)
@@ -50,11 +50,17 @@ run_python_command "flap" 0.2 -1 "WIFV" "AL-AM"
 run_python_command "flap" 0.3 -1 "WIFV" "AL-AM" 
 run_python_command "flap" 0.5 -1 "WIFV" "AL-AM" 
 
+# llama-7b with flap pruning method (p=0.2/0.3/0.5, uniform in all layers)
+echo "Running with flap pruning method"
+# run_python_command "flap" 0.2 -1 "WIFV" "UL-UM"
+# run_python_command "flap" 0.3 -1 "WIFV" "UL-UM"
+# run_python_command "flap" 0.5 -1 "WIFV" "UL-UM"
+
 # # llama-7b with wanda-sp pruning method (p=0.2/0.3/0.5, uniform in all layers)
-# echo "Running with wanda-sp pruning method"
-# run_python_command "wanda_sp" 0.2 -1 N/A N/A
-# run_python_command "wanda_sp" 0.3 -1 N/A N/A 
-# run_python_command "wanda_sp" 0.5 -1 N/A N/A 
+echo "Running with wanda-sp pruning method"
+run_python_command "wanda_sp" 0.2 -1 N/A N/A
+run_python_command "wanda_sp" 0.3 -1 N/A N/A 
+run_python_command "wanda_sp" 0.5 -1 N/A N/A 
 
 # # llama-7b with mag-sp pruning method (p=0.2/0.3/0.5, uniform in all layers)
 # echo "Running with magnitude pruning method"

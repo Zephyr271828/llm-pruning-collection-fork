@@ -112,8 +112,12 @@ def get_c4(nsamples, seed, seqlen, tokenizer):
         tuple: A tuple containing trainloader (list of input and target pairs) and encoded validation dataset.
     """
     # Load train and validation datasets
-    traindata = load_dataset('allenai/c4', 'allenai--c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, split='train')
-    valdata = load_dataset('allenai/c4', 'allenai--c4', data_files={'validation': 'en/c4-validation.00000-of-00008.json.gz'}, split='validation')
+    data_files = {
+        'train': 'en/c4-train.00000-of-01024.json.gz',
+        'validation': 'en/c4-validation.00000-of-00008.json.gz',
+    }
+    traindata = load_dataset('allenai/c4', 'en', data_files=data_files, split='train')
+    valdata = load_dataset('allenai/c4', 'en', data_files=data_files, split='validation')
     # traindata = load_dataset('json', data_files={'train': 'datasets/c4/c4-train.00000-of-01024.json.gz'}, split='train')
     # valdata = load_dataset('json', data_files={'validation': 'datasets/c4/c4-validation.00000-of-00008.json.gz'}, split='validation')
     

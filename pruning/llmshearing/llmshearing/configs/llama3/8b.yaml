@@ -1,6 +1,6 @@
 data_local: /path/to/your/data
 data_remote: # If blank, files must be present in data_local
-tokenizer_name: meta-llama/Meta-Llama-3-8B
+tokenizer_name: /scratch/yx3038/cache/Llama-3.1-8B
 max_seq_len: 8192
 global_seed: 17
 
@@ -51,10 +51,12 @@ train_loader:
   dataset:
     local: ${data_local}
     remote: ${data_remote}
-    split: train
+    split: train_small
     shuffle: true
+    tokenizer_name: ${tokenizer_name}
     max_seq_len: ${max_seq_len}
     shuffle_seed: ${global_seed}
+    is_uint16: true
   drop_last: true
   num_workers: 8
 
@@ -63,10 +65,12 @@ eval_loader:
   dataset:
     local: ${data_local}
     remote: ${data_remote}
-    split: val
-    shuffle: false
+    split: train_small
+    shuffle: true
+    tokenizer_name: ${tokenizer_name}
     max_seq_len: ${max_seq_len}
     shuffle_seed: ${global_seed}
+    is_uint16: true
   drop_last: false
   num_workers: 8
 

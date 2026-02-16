@@ -160,10 +160,12 @@ def main(cfg):
         cfg.model.init_device = 'cpu'
 
      # Loggers
-    loggers = [
-        build_logger(name, logger_cfg)
-        for name, logger_cfg in (cfg.get('loggers') or {}).items()
-    ]
+    # loggers = [
+    #     build_logger(name, logger_cfg)
+    #     for name, logger_cfg in (cfg.get('loggers') or {}).items()
+    # ]
+    loggers = []
+    # temporarity disable all loggers
     
     save_folder = cfg.save_folder.replace('{run_name}', cfg.run_name)
     filename = f"{save_folder}/logs.txt"

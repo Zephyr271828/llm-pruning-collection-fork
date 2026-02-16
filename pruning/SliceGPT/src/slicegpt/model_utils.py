@@ -43,6 +43,7 @@ def get_layer0_inputs(model_adapter: ModelAdapter, batch: Tensor) -> tuple[Tenso
 
     try:
         batch = utils.map_tensors(batch, device=config.device)
+        model_adapter.model.to(config.device)
         model_adapter.model(**batch)
     except ValueError:
         pass

@@ -154,7 +154,7 @@ def prepare_calibration_input(model, dataloader, device):
     return inps, outs, attention_mask, position_ids 
 
 
-def compress(layer, attn_mask, mlp_mask, attn_mean_inp, mlp_mean_inp, device, bias=False, unstr=False):
+def compress(layer, attn_mask, mlp_mask, attn_mean_inp, mlp_mean_inp, device, bias=True, unstr=False):
     """
     Compress a model layer by masking or pruning based on the given masks.
     
@@ -165,7 +165,7 @@ def compress(layer, attn_mask, mlp_mask, attn_mean_inp, mlp_mean_inp, device, bi
         attn_mean_inp (torch.Tensor): The mean attention input.
         mlp_mean_inp (torch.Tensor): The mean MLP input.
         device (torch.device): Device on which the model is loaded.
-        bias (bool, optional): Whether to consider bias while compressing. Defaults to False.
+        bias (bool, optional): Whether to consider bias while compressing. Defaults to True.
         unstr (bool, optional): If True, only mask without real pruning. Defaults to False.
         
     Returns:
@@ -365,12 +365,20 @@ def prune_flap(args, model, tokenizer, device=torch.device("cuda:0")):
                 head_dim = _get_head_dim(layer)
                 gqa_groups = _get_gqa_groups(layer)
                 if args.structure == "UL-UM":
-                    W_metric = W_metric.reshape(-1, head_dim * gqa_groups).sum(dim=1)
-                    thresh = torch.sort(W_metric.cuda())[0][int(args.pruning_ratio*layer.self_attn.num_heads)].cpu()
+                    # Aggregate by head_dim to get per-Q-head metric
+                    W_metric = W_metric.reshape(-1, head_dim).sum(dim=1)
+                    # For GQA: group Q-head scores by KV groups and average
+                    if gqa_groups > 1:
+                        W_metric = W_metric.reshape(-1, gqa_groups).mean(dim=1)  # Shape: [num_kv_heads]
+                    thresh = torch.sort(W_metric.cuda())[0][int(args.pruning_ratio * W_metric.numel())].cpu()
                     W_mask = (W_metric>=thresh)
                     attn_mask.append(W_mask)
                 elif args.structure == "UL-MM":
-                    W_metric = W_metric.reshape(-1, head_dim * gqa_groups).sum(dim=1)
+                    # Aggregate by head_dim to get per-Q-head metric
+                    W_metric = W_metric.reshape(-1, head_dim).sum(dim=1)
+                    # For GQA: group Q-head scores by KV groups and average
+                    if gqa_groups > 1:
+                        W_metric = W_metric.reshape(-1, gqa_groups).mean(dim=1)  # Shape: [num_kv_heads]
                     thresh = torch.sort(W_metric.cuda())[0][args.remove_heads // len(layers)].cpu()
                     W_mask = (W_metric>=thresh)
                     attn_mask.append(W_mask)
@@ -402,7 +410,11 @@ def prune_flap(args, model, tokenizer, device=torch.device("cuda:0")):
         attn_metric = standarlization(attn_metric)
         head_dim = _get_head_dim(model.model.layers[0])
         gqa_groups = _get_gqa_groups(model.model.layers[0])
-        attn_metric = attn_metric.reshape(len(layers), -1, head_dim * gqa_groups).mean(dim=2)
+        # Aggregate by head_dim to get per-Q-head metric
+        attn_metric = attn_metric.reshape(len(layers), -1, head_dim).mean(dim=2)
+        # For GQA: group Q-head scores by KV groups and average across layers and gqa_groups
+        if gqa_groups > 1:
+            attn_metric = attn_metric.reshape(len(layers), -1, gqa_groups).mean(dim=2)  # [layers, num_kv_heads]
         
         mlp_metric = torch.stack(mlp_metric_list)
         mlp_metric = standarlization(mlp_metric)
@@ -498,8 +510,12 @@ def prune_wanda_sp(args, model, tokenizer, device=torch.device("cuda:0")):
             if name == 'self_attn.o_proj':
                 head_dim = _get_head_dim(layer)
                 gqa_groups = _get_gqa_groups(layer)
-                W_metric = W_metric.mean(axis=0).reshape(-1, head_dim * gqa_groups).sum(dim=1)    # importance score of each head
-                thresh = torch.sort(W_metric.cuda())[0][int(args.pruning_ratio*layer.self_attn.num_heads)].cpu()
+                # Aggregate by head_dim to get per-Q-head metric
+                W_metric = W_metric.mean(axis=0).reshape(-1, head_dim).sum(dim=1)
+                # For GQA: group Q-head scores by KV groups and average
+                if gqa_groups > 1:
+                    W_metric = W_metric.reshape(-1, gqa_groups).mean(dim=1)  # Shape: [num_kv_heads]
+                thresh = torch.sort(W_metric.cuda())[0][int(args.pruning_ratio * W_metric.numel())].cpu()
                 W_mask = (W_metric>=thresh)
                 compress(layer, W_mask, None, None, None, device, bias=False, unstr=args.unstr)
             else:

@@ -24,11 +24,20 @@ def get_llm(model, cache_dir="llm_weights"):
         device_map="auto"
     )
     
-    # for i in range(model.config.num_hidden_layers):
-    #     model.model.layers[i].self_attn.o_proj.bias = torch.nn.Parameter(torch.zeros_like(model.model.layers[i].self_attn.o_proj.bias, device='cpu'))  # 或 'cuda'
-    #     model.model.layers[i].mlp.down_proj.bias = torch.nn.Parameter(torch.zeros_like(model.model.layers[i].mlp.down_proj.bias, device='cpu'))  # 或 'cuda'
-    #     torch.nn.init.zeros_(model.model.layers[i].self_attn.o_proj.bias)
-    #     torch.nn.init.zeros_(model.model.layers[i].mlp.down_proj.bias)
+    for i in range(model.config.num_hidden_layers):
+        # Initialize o_proj bias
+        if model.model.layers[i].self_attn.o_proj.bias is None:
+            out_features = model.model.layers[i].self_attn.o_proj.out_features
+            model.model.layers[i].self_attn.o_proj.bias = torch.nn.Parameter(torch.zeros(out_features, dtype=torch.float16))
+        else:
+            torch.nn.init.zeros_(model.model.layers[i].self_attn.o_proj.bias)
+        
+        # Initialize down_proj bias
+        if model.model.layers[i].mlp.down_proj.bias is None:
+            out_features = model.model.layers[i].mlp.down_proj.out_features
+            model.model.layers[i].mlp.down_proj.bias = torch.nn.Parameter(torch.zeros(out_features, dtype=torch.float16))
+        else:
+            torch.nn.init.zeros_(model.model.layers[i].mlp.down_proj.bias) 
         
     # model.seqlen = min(model.config.max_position_embeddings, 8192)
     model.seqlen = 128
@@ -101,9 +110,21 @@ def main():
     if args.save_model:
         if not os.path.exists(args.save_model):
             os.makedirs(args.save_model)
-        # torch.save(model, f'{args.save_model}/pruned_model.pt')
+        
+        # Mark that model has been modified with bias for proper loading
+        model.config.attn_bias = True
+        model.config.mlp_bias = True
+        
         model.save_pretrained(args.save_model)
         tokenizer.save_pretrained(args.save_model)
+        
+        # Save a note about the modifications
+        with open(os.path.join(args.save_model, 'README.md'), 'w') as f:
+            f.write("# Pruned Model with Bias Compensation\n\n")
+            f.write("This model has been pruned using FLAP with bias compensation.\n")
+            f.write("The o_proj and down_proj layers have bias parameters added.\n")
+            f.write(f"Sparsity ratio: {sparsity_ratio:.4f}\n")
+            f.write(f"Parameters: {sum(p.numel() for p in model.parameters()) / 1000 ** 3:.2f}B\n")
     
 
 if __name__ == '__main__':

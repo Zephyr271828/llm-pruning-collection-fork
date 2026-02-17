@@ -1,5 +1,8 @@
 # SLEB
 
+This directory contains the implementation of SLEB by Song et al. For the original README, please see [here](ORIGINAL_README.md).
+
+
 ## Installation
 ```bash
 bash scripts/install.sh
@@ -8,6 +11,7 @@ bash scripts/install.sh
 ## Pruning
 ```bash
 bash scripts/prune_llama2_7b.sh
+bash scripts/prune_llama2_13b.sh
 bash scripts/prune_llama3.1_8b.sh
 ```
 

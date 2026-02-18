@@ -23,6 +23,7 @@ The repo is organized as follows:
 │   ├── LLM-Pruner
 │   ├── llmshearing # sheared llama
 │   ├── minitron # including shortgpt
+│   ├── SLEB # including sleb
 │   ├── SliceGPT # including slicegpt
 │   └── wanda # including sparsegpt and magnitude pruning
 ├── training
@@ -45,6 +46,7 @@ where `pruning` is the collection of the pruning methods we experimented; `train
 - [x] [SparseGPT](pruning/wanda/README.md)
 - [x] [Magnitude](pruning/wanda/README.md)
 - [x] [Sheared Llama](pruning/llmshearing/README.md)
+- [x] [SLEB](pruning/SLEB/README.md)
 - [x] [LLM Pruner](pruning/LLM-Pruner/README.md)
 - [x] [FLAP](pruning/FLAP/README.md)
 

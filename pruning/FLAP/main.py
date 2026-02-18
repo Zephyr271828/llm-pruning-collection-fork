@@ -1,12 +1,12 @@
-import argparse
 import os 
-import numpy as np
+import pdb
 import torch
+import argparse
+import numpy as np
 from transformers import AutoTokenizer, AutoModelForCausalLM
+
 from models.hf_llama.modeling_llama import LlamaForCausalLM
-
 from importlib.metadata import version
-
 from lib.prune import prune_wanda_sp, prune_flap, prune_magnitude_sp, check_sparsity
 from lib.eval import eval_ppl
 
@@ -16,27 +16,30 @@ print('accelerate', version('accelerate'))
 print('# of gpus: ', torch.cuda.device_count())
 
 def get_llm(model, cache_dir="llm_weights"):
-    # model = AutoModelForCausalLM.from_pretrained(
-    #     model, 
-    #     torch_dtype=torch.float16, 
-    #     cache_dir=cache_dir, 
-    #     low_cpu_mem_usage=True, 
-    #     device_map="auto"
-    # )
-    model = LlamaForCausalLM.from_pretrained(
+    model = AutoModelForCausalLM.from_pretrained(
         model, 
         torch_dtype=torch.float16, 
         cache_dir=cache_dir, 
         low_cpu_mem_usage=True, 
-        # device_map="auto"
+        device_map="auto"
     )
     
-    for i in range(32):
-        model.model.layers[i].self_attn.o_proj.bias = torch.nn.Parameter(torch.zeros_like(model.model.layers[i].self_attn.o_proj.bias, device='cpu'))  # 或 'cuda'
-        model.model.layers[i].mlp.down_proj.bias = torch.nn.Parameter(torch.zeros_like(model.model.layers[i].mlp.down_proj.bias, device='cpu'))  # 或 'cuda'
-        torch.nn.init.zeros_(model.model.layers[i].self_attn.o_proj.bias)
-        torch.nn.init.zeros_(model.model.layers[i].mlp.down_proj.bias)
+    for i in range(model.config.num_hidden_layers):
+        # Initialize o_proj bias
+        if model.model.layers[i].self_attn.o_proj.bias is None:
+            out_features = model.model.layers[i].self_attn.o_proj.out_features
+            model.model.layers[i].self_attn.o_proj.bias = torch.nn.Parameter(torch.zeros(out_features, dtype=torch.float16))
+        else:
+            torch.nn.init.zeros_(model.model.layers[i].self_attn.o_proj.bias)
         
+        # Initialize down_proj bias
+        if model.model.layers[i].mlp.down_proj.bias is None:
+            out_features = model.model.layers[i].mlp.down_proj.out_features
+            model.model.layers[i].mlp.down_proj.bias = torch.nn.Parameter(torch.zeros(out_features, dtype=torch.float16))
+        else:
+            torch.nn.init.zeros_(model.model.layers[i].mlp.down_proj.bias) 
+        
+    # model.seqlen = min(model.config.max_position_embeddings, 8192)
     model.seqlen = 128
     return model
 
@@ -71,6 +74,12 @@ def main():
     if "30b" in args.model or "65b" in args.model: # for 30b and 65b we use device_map to load onto multiple A6000 GPUs, thus the processing here.
         device = model.hf_device_map["lm_head"]
     print("use device ", device)
+    
+    # pdb.set_trace()
+    
+    if args.eval:
+        ppl = eval_ppl(model, tokenizer, device)    
+        print(f"ppl on wikitext {ppl}")
 
     # Prune the model
     print("pruning starts")
@@ -91,6 +100,7 @@ def main():
     print(f"sparsity sanity check {sparsity_ratio:.4f}")
     print(f"model parameter {sum(p.numel() for p in model.parameters()) / 1000 ** 3:.2f}B")
     print("*"*30)
+    
     # Evaluate the model
     if args.eval:
         ppl = eval_ppl(model, tokenizer, device)    
@@ -100,9 +110,21 @@ def main():
     if args.save_model:
         if not os.path.exists(args.save_model):
             os.makedirs(args.save_model)
-        # torch.save(model, f'{args.save_model}/pruned_model.pt')
+        
+        # Mark that model has been modified with bias for proper loading
+        model.config.attn_bias = True
+        model.config.mlp_bias = True
+        
         model.save_pretrained(args.save_model)
         tokenizer.save_pretrained(args.save_model)
+        
+        # Save a note about the modifications
+        with open(os.path.join(args.save_model, 'README.md'), 'w') as f:
+            f.write("# Pruned Model with Bias Compensation\n\n")
+            f.write("This model has been pruned using FLAP with bias compensation.\n")
+            f.write("The o_proj and down_proj layers have bias parameters added.\n")
+            f.write(f"Sparsity ratio: {sparsity_ratio:.4f}\n")
+            f.write(f"Parameters: {sum(p.numel() for p in model.parameters()) / 1000 ** 3:.2f}B\n")
     
 
 if __name__ == '__main__':

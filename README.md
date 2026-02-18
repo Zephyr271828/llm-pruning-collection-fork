@@ -19,6 +19,7 @@ The repo is organized as follows:
 
 ```bash
 ├── pruning
+│   ├── FLAP # including Wanda-sp and FLAP
 │   ├── LLM-Pruner
 │   ├── llmshearing # sheared llama
 │   ├── minitron # including shortgpt
@@ -43,9 +44,10 @@ where `pruning` is the collection of the pruning methods we experimented; `train
 - [x] [Magnitude](pruning/wanda/README.md)
 - [x] [Sheared Llama](pruning/llmshearing/README.md)
 - [x] [LLM Pruner](pruning/LLM-Pruner/README.md)
+- [x] [FLAP](pruning/FLAP/README.md)
+
 <!-- - [ ] [Shortened Llama](pruning/shortened-llm/README.md)
 - [ ] [Wanda-sp](pruning/FLAP/README.md)
-- [ ] [FLAP](pruning/FLAP/README.md)
 - [ ] [SLEB](pruning/SLEB/README.md) -->
 
 **Training Frameworks**

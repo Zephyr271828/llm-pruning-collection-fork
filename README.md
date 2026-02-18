@@ -1,4 +1,10 @@
-# LLM Pruning Collection
+# Small LLMs: Pruning vs Training from Scratch
+
+[Yufeng Xu<sup>1</sup>](https://github.com/Zephyr271828), [Taiming Lu<sup>1</sup>](https://taiminglu.com/), [Jiachen Zhu<sup>2</sup>](https://jiachenzhu.github.io/), [Mingjie Sun<sup>3</sup>](https://eric-mingjie.github.io/), [Kunjun Li<sup>1</sup>](https://kunjun-li.github.io/), and [Zhuang Liu<sup>1</sup>](https://liuzhuang13.github.io/)
+
+1 Princeton. 2 NYU. 3 CMU.  
+
+---
 
 <!--  This repo is the codebase for our project "Rethinking the Value of Network Pruning for Large Language Models". It contains: -->
 This is a Jax-based repo for LLM Prunning, It contains:
@@ -13,10 +19,12 @@ The repo is organized as follows:
 
 ```bash
 ├── pruning
+│   ├── FLAP # including Wanda-sp and FLAP
 │   ├── LLM-Pruner
 │   ├── llmshearing # sheared llama
 │   ├── minitron # including shortgpt
 │   ├── SLEB # including sleb
+│   ├── SliceGPT # including slicegpt
 │   └── wanda # including sparsegpt and magnitude pruning
 ├── training
 │   ├── fms_fsdp
@@ -34,14 +42,16 @@ where `pruning` is the collection of the pruning methods we experimented; `train
 - [x] [Minitron](pruning/minitron/README.md#minitron-depth)
 - [x] [ShortGPT](pruning/minitron/README.md#shortgpt)
 - [x] [Wanda](pruning/wanda/README.md)
+- [x] [SliceGPT](pruning/SliceGPT/README.md)
 - [x] [SparseGPT](pruning/wanda/README.md)
 - [x] [Magnitude](pruning/wanda/README.md)
 - [x] [Sheared Llama](pruning/llmshearing/README.md)
 - [x] [SLEB](pruning/SLEB/README.md)
 - [x] [LLM Pruner](pruning/LLM-Pruner/README.md)
+- [x] [FLAP](pruning/FLAP/README.md)
+
 <!-- - [ ] [Shortened Llama](pruning/shortened-llm/README.md)
 - [ ] [Wanda-sp](pruning/FLAP/README.md)
-- [ ] [FLAP](pruning/FLAP/README.md)
 - [ ] [SLEB](pruning/SLEB/README.md) -->
 
 **Training Frameworks**

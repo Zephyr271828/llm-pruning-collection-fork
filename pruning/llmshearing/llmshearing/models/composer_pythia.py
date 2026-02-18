@@ -136,8 +136,14 @@ class PythiaModel(nn.Module):
         zs_block = {}
         if zs is not None:
             for key in zs:
-                if key == "hidden_z": zs_block["hidden_z"] = zs["hidden_z"]
-                else: zs_block[key] = zs[key][block_idx] 
+                if key == "hidden_z":
+                    zs_block["hidden_z"] = zs["hidden_z"]
+                elif key == "qo_head_dim_z":
+                    zs_block["qk_head_dim_z"] = zs[key][block_idx]
+                elif key == "kv_head_dim_z":
+                    zs_block["vo_head_dim_z"] = zs[key][block_idx]
+                else:
+                    zs_block[key] = zs[key][block_idx]
         return zs_block
 
     def forward(
@@ -245,7 +251,14 @@ class PythiaBlock(nn.Module):
         hidden_z: Optional[torch.Tensor] = None,
         qk_head_dim_z: Optional[torch.Tensor] = None,
         vo_head_dim_z: Optional[torch.Tensor] = None,
+        qo_head_dim_z: Optional[torch.Tensor] = None,
+        kv_head_dim_z: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
+        if qo_head_dim_z is not None:
+            qk_head_dim_z = qo_head_dim_z
+        if kv_head_dim_z is not None:
+            vo_head_dim_z = kv_head_dim_z
+
         if self.ln_1 is not None:
             a = self.ln_1(x, hidden_z=hidden_z)
             attn_output, _, past_key_value = self.attn(a, 

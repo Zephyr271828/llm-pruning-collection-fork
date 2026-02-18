@@ -79,8 +79,15 @@ def construct_hf_config(model_config: om = None):
         tokenizer_name = "/n/fs/vision-mix/yx1168/model_ckpts/Llama-2-7b-hf"
         config = AutoConfig.from_pretrained(hf_model_name)
         
+    key_remap = {
+        "n_heads": "num_attention_heads",
+        "n_kv_heads": "num_key_value_heads",
+        "d_model": "hidden_size",
+        "n_layers": "num_hidden_layers",
+    }
     for key in model_config:
-        setattr(config, key, model_config[key])
+        target_key = key_remap.get(key, key)
+        setattr(config, target_key, model_config[key])
     # import pdb; pdb.set_trace()
     
     return config, tokenizer_name 

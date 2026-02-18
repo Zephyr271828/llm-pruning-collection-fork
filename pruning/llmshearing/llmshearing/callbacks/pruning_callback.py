@@ -1,4 +1,5 @@
 import os
+import pdb
 import time
 from typing import Any, Dict, List
 
@@ -16,9 +17,18 @@ class PruningCallback(Callback):
     def __init__(self, save_folder: str = None) -> None:
         self.save_folder = save_folder
 
+    def _get_inner_model(self, state: State):
+        model = state.model
+        visited = set()
+        while hasattr(model, "model") and id(model) not in visited:
+            visited.add(id(model))
+            model = model.model
+        return model
+
     def plug_in_pruned_steps(self, state: State, logger: Logger):
         """ Hack: Add pruned_steps to the batch to calculate target sparsity during the pruning warmup stage """
-        if getattr(state.model.model, "l0_module", None) is not None:
+        inner_model = self._get_inner_model(state)
+        if getattr(inner_model, "l0_module", None) is not None:
             input_ids = state.batch["input_ids"]
             state.batch["pruned_steps"] = torch.LongTensor([state.timestamp.batch.value] * len(input_ids)).to(input_ids.device)
             

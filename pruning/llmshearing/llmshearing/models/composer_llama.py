@@ -4,12 +4,7 @@ from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-# from composer.metrics import METRIC_DEFAULT_CTORS
-from composer.metrics import (
-    CrossEntropy,
-    LanguagePerplexity,
-    MaskedAccuracy,
-)
+from composer.metrics import METRIC_DEFAULT_CTORS
 from composer.metrics.nlp import LanguageCrossEntropy, LanguagePerplexity
 from composer.models.base import ComposerModel
 from composer.utils import dist, get_device, reproducibility
@@ -22,11 +17,6 @@ from transformers.pytorch_utils import (find_pruneable_heads_and_indices,
 from llmshearing.models.l0_module import L0Module
 from llmshearing.models.metrics import DomainCount, DomainLanguageCrossEntropy
 
-METRIC_DEFAULT_CTORS = {
-    'cross_entropy': CrossEntropy,
-    'perplexity': LanguagePerplexity,
-    'accuracy': MaskedAccuracy,
-}
 
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6, device: Optional[str] = None):
@@ -150,15 +140,14 @@ class ComposerMosaicLlama(ComposerModel):
             self.eval_metrics = evaluator_metrics
 
     def _compute_num_fwd_flops(self):
-        # Updated for GQA support
+        # Might not be correct for LLaMA structures
         n_params = sum(p.numel() for p in self.parameters())
         # the number of paramters is approximately the number of multiply-accumulates (MAC) in the network
         # each MAC has 2 FLOPs - we multiply by 2 ie 2 * n_param
         # this gets us FLOPs / token
         params_flops_per_token = 2 * n_params
         params_flops_per_seq = params_flops_per_token * self.model.cfg.max_seq_len
-        # For GQA: attention FLOPs use n_heads for Q but computation is still O(n_heads * seq_len^2)
-        # because KV is expanded to match Q during computation
+        # there are 2 FLOPS per mac; there is A=Q*K^T and out=A*V ops (ie mult by 2)
         attn_flops_per_seq = self.model.cfg.n_layers * 2 * 2 * (
             self.model.cfg.d_model * (self.model.cfg.max_seq_len**2))
         return params_flops_per_seq + attn_flops_per_seq
@@ -286,8 +275,10 @@ class LlamaModel(nn.Module):
         zs_block = {}
         if zs is not None:
             for key in zs:
-                if key == "hidden_z": zs_block["hidden_z"] = zs["hidden_z"]
-                else: zs_block[key] = zs[key][block_idx] 
+                if key == "hidden_z":
+                    zs_block["hidden_z"] = zs["hidden_z"]
+                else:
+                    zs_block[key] = zs[key][block_idx]
         return zs_block
 
     def forward(
@@ -397,8 +388,8 @@ class LlamaBlock(nn.Module):
         intermediate_z: Optional[torch.Tensor] = None,
         mlp_z: Optional[torch.Tensor] = None,
         hidden_z: Optional[torch.Tensor] = None,
-        qk_head_dim_z: Optional[torch.Tensor] = None,
-        vo_head_dim_z: Optional[torch.Tensor] = None,
+        qo_head_dim_z: Optional[torch.Tensor] = None,
+        kv_head_dim_z: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
        
         if self.ln_1 is not None:
@@ -413,8 +404,8 @@ class LlamaBlock(nn.Module):
                                              head_z=head_z,
                                              head_layer_z=head_layer_z,
                                              hidden_z=hidden_z,
-                                             qk_head_dim_z=qk_head_dim_z,
-                                             vo_head_dim_z=vo_head_dim_z)
+                                             qo_head_dim_z=qo_head_dim_z,
+                                             kv_head_dim_z=kv_head_dim_z)
         else:
             b = 0
         x = x + b
@@ -452,36 +443,58 @@ class LlamaAttention(nn.Module):
         
         self.d_model = cfg.d_model
         self.n_heads = cfg.n_heads
-        # Support for GQA (Grouped Query Attention) - used in Llama3
-        self.num_key_value_heads = cfg.get('num_key_value_heads', cfg.n_heads)
-        self.num_key_value_groups = self.n_heads // self.num_key_value_heads
-        self.all_head_size = cfg.d_model
-        self.head_dim = self.d_model // self.n_heads 
+        self.n_kv_heads = cfg.get('n_kv_heads', cfg.get('num_key_value_heads', self.n_heads))
+        assert self.n_heads % self.n_kv_heads == 0, "n_heads must be divisible by n_kv_heads"
+        self.n_kv_groups = self.n_heads // self.n_kv_heads
+        self.q_hidden_size = self.n_heads * cfg.get('head_dim', self.d_model // self.n_heads)
+        self.kv_hidden_size = self.n_kv_heads * cfg.get('head_dim', self.d_model // self.n_heads)
+        self.all_head_size = self.q_hidden_size
+        self.head_dim = cfg.get('head_dim', self.d_model // self.n_heads)
         self.pruned_heads = set()
         
         self.softmax_scale = cfg.get('softmax_scale')
         if self.softmax_scale is None:
-            self.softmax_scale = 1 / math.sqrt(self.d_model / self.n_heads)
+            self.softmax_scale = 1 / math.sqrt(self.head_dim)
         self.attn_dropout_p = cfg.get('attn_pdrop')
         
         # self.Wqkv = nn.Linear(self.d_model, 3 * self.d_model, device=device, bias=False)
         # for param init fn; enables shape based init of fused layers
         # fuse_splits = (cfg.d_model, 2 * cfg.d_model)
         # self.Wqkv._fused = (0, fuse_splits)  # type: ignore
-        self.wq = nn.Linear(self.d_model, self.d_model, device=device, bias=False)
-        # For GQA: K and V use num_key_value_heads instead of n_heads
-        self.wk = nn.Linear(self.d_model, self.num_key_value_heads * self.head_dim, device=device, bias=False)
-        self.wv = nn.Linear(self.d_model, self.num_key_value_heads * self.head_dim, device=device, bias=False)
+        self.wq = nn.Linear(self.d_model, self.q_hidden_size, device=device, bias=False)
+        self.wk = nn.Linear(self.d_model, self.kv_hidden_size, device=device, bias=False)
+        self.wv = nn.Linear(self.d_model, self.kv_hidden_size, device=device, bias=False)
         
         self.attn_fn = flash_attn_fn if self.attn_impl == 'flash' else normal_attn_fn
 
-        self.out_proj = nn.Linear(self.d_model, self.d_model, device=device, bias=False)
+        self.out_proj = nn.Linear(self.q_hidden_size, self.d_model, device=device, bias=False)
         self.out_proj._is_residual = True  # type: ignore
         
         self.rotary_emb = LlamaRotaryEmbedding(self.head_dim)
+
+    def _expand_kv_dim_mask_to_qo(self, z: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+        if z is None:
+            return None
+        z = z.reshape(-1)
+        if z.numel() == self.q_hidden_size:
+            return z
+        if z.numel() != self.kv_hidden_size:
+            raise ValueError(
+                f"Unexpected qo/kv dim mask size {z.numel()}, expected {self.kv_hidden_size} or {self.q_hidden_size}."
+            )
+        z = z.view(self.n_kv_heads, self.head_dim)
+        z = torch.repeat_interleave(z, self.n_kv_groups, dim=0)
+        return z.reshape(-1)
+
+    def _expand_kv_index_to_qo_index(self, kv_index: torch.Tensor) -> torch.Tensor:
+        kv_keep = torch.zeros(self.kv_hidden_size, dtype=torch.bool, device=kv_index.device)
+        kv_keep[kv_index] = True
+        kv_keep = kv_keep.view(self.n_kv_heads, self.head_dim)
+        qo_keep = torch.repeat_interleave(kv_keep, self.n_kv_groups, dim=0).reshape(-1)
+        return torch.where(qo_keep)[0].to(device=kv_index.device, dtype=kv_index.dtype)
     
     def prune_params(self, zs_block):
-        head_z = None; head_layer_z = None; hidden_z = None; qk_head_dim_z = None; vo_head_dim_z = None
+        head_z = None; head_layer_z = None; hidden_z = None; qo_head_dim_z = None; kv_head_dim_z = None
         if "head_z" in zs_block:
             head_z = zs_block["head_z"].squeeze()
         
@@ -491,22 +504,33 @@ class LlamaAttention(nn.Module):
         if "hidden_z" in zs_block:
             hidden_z = zs_block["hidden_z"].squeeze()
         
-        if "qk_head_dim_z" in zs_block:
-            qk_head_dim_z = zs_block["qk_head_dim_z"].squeeze() # qk_head_dim is the same as hidden_z
-            vo_head_dim_z = zs_block["vo_head_dim_z"].squeeze() # vo_head_dim is the same as hidden_z
+        if "qo_head_dim_z" in zs_block:
+            qo_head_dim_z = zs_block["qo_head_dim_z"].squeeze()
+
+        if "kv_head_dim_z" in zs_block:
+            kv_head_dim_z = zs_block["kv_head_dim_z"].squeeze()
+
+        qo_head_dim_z = self._expand_kv_dim_mask_to_qo(qo_head_dim_z)
             
             
         # update params #
         if head_z is not None:
-            head_z_for_update = torch.repeat_interleave(head_z, self.head_dim)
-            self.wv.weight.data = self.wv.weight.data.transpose(0, 1).mul(head_z_for_update).transpose(0, 1)
+            head_z_kv = torch.repeat_interleave(head_z, self.head_dim)
+            head_z_qo = torch.repeat_interleave(head_z, self.n_kv_groups * self.head_dim)
+            self.wq.weight.data = self.wq.weight.data.transpose(0, 1).mul(head_z_qo).transpose(0, 1)
+            self.wk.weight.data = self.wk.weight.data.transpose(0, 1).mul(head_z_kv).transpose(0, 1)
+            self.wv.weight.data = self.wv.weight.data.transpose(0, 1).mul(head_z_kv).transpose(0, 1)
+            self.out_proj.weight.data = self.out_proj.weight.data.transpose(0, 1).mul(head_z_qo).transpose(0, 1)
         if head_layer_z is not None:
             self.out_proj.weight.data = self.out_proj.weight.data.transpose(0, 1).mul(head_layer_z).transpose(0, 1)
         if hidden_z is not None:
             self.out_proj.weight.data = self.out_proj.weight.data.transpose(0, 1).mul(hidden_z).transpose(0, 1)
-        if qk_head_dim_z is not None:
-            self.wq.weight.data = self.wq.weight.data.transpose(0, 1).mul(qk_head_dim_z).transpose(0, 1)
-            self.wv.weight.data = self.wv.weight.data.transpose(0, 1).mul(vo_head_dim_z).transpose(0, 1)
+        if qo_head_dim_z is not None:
+            self.wq.weight.data = self.wq.weight.data.transpose(0, 1).mul(qo_head_dim_z).transpose(0, 1)
+            self.out_proj.weight.data = self.out_proj.weight.data.transpose(0, 1).mul(qo_head_dim_z).transpose(0, 1)
+        if kv_head_dim_z is not None:
+            self.wk.weight.data = self.wk.weight.data.transpose(0, 1).mul(kv_head_dim_z).transpose(0, 1)
+            self.wv.weight.data = self.wv.weight.data.transpose(0, 1).mul(kv_head_dim_z).transpose(0, 1)
         #################
         
         if hidden_z is not None:
@@ -514,7 +538,7 @@ class LlamaAttention(nn.Module):
             print(f"    Head hidden: {len(hidden_z)} -> {len(remaining_index)}") 
             half = next(self.wq.parameters()).dtype == torch.float16
             self.wk = prune_linear_layer(self.wk, remaining_index, dim=1)
-            self.wq = prune_linear_layer(self.wq, remaining_index, dim=1)
+            self.wq= prune_linear_layer(self.wq, remaining_index, dim=1)
             self.wv = prune_linear_layer(self.wv, remaining_index, dim=1)
             self.out_proj = prune_linear_layer(self.out_proj, remaining_index)
             if half:
@@ -523,55 +547,56 @@ class LlamaAttention(nn.Module):
                 self.wv.half()
                 self.out_proj.half()
          
-        to_prune_heads = turn_head_z(head_z, head_layer_z)
+        to_prune_heads = turn_head_z(head_z, head_layer_z) if head_z is not None else []
         len_to_prune_heads = len(to_prune_heads)
         if len_to_prune_heads == 0:
             print(f"    Heads: {self.n_heads} -> {self.n_heads}")
             return
 
-        heads, index = find_pruneable_heads_and_indices(
-            to_prune_heads, self.n_heads, self.head_dim, self.pruned_heads
+        heads_kv, index_kv = find_pruneable_heads_and_indices(
+            to_prune_heads, self.n_kv_heads, self.head_dim, self.pruned_heads
         )
-        
-        qk_index = index; vo_index = index
-        if qk_head_dim_z is not None:
-            remaining_qk_index = torch.where(~qk_head_dim_z.eq(0))[0]
-            remaining_vo_index = torch.where(~vo_head_dim_z.eq(0))[0]
+
+        kv_index = index_kv
+        qo_index = self._expand_kv_index_to_qo_index(index_kv)
+        if kv_head_dim_z is not None or qo_head_dim_z is not None:
+            remaining_kv_index = torch.where(~kv_head_dim_z.eq(0))[0] if kv_head_dim_z is not None else kv_index
             import numpy as np
-            qk_index = torch.from_numpy(np.intersect1d(index.detach().cpu().numpy(), remaining_qk_index.detach().cpu().numpy())).to(index.device).to(index.dtype)
-            vo_index = torch.from_numpy(np.intersect1d(index.detach().cpu().numpy(), remaining_vo_index.detach().cpu().numpy())).to(index.device).to(index.dtype)
-            print(f"    QKVO dims: {len(hidden_z)} -> {len(qk_index)}")
+            kv_index = torch.from_numpy(np.intersect1d(kv_index.detach().cpu().numpy(), remaining_kv_index.detach().cpu().numpy())).to(kv_index.device).to(kv_index.dtype)
+            qo_index = self._expand_kv_index_to_qo_index(kv_index)
+            if qo_head_dim_z is not None:
+                remaining_qo_index = torch.where(~qo_head_dim_z.eq(0))[0]
+                qo_index = torch.from_numpy(np.intersect1d(qo_index.detach().cpu().numpy(), remaining_qo_index.detach().cpu().numpy())).to(qo_index.device).to(qo_index.dtype)
+            print(f"    QOKV dims: {self.q_hidden_size} -> {len(qo_index)}")
         
         # Prune linear layers
         # setting layers to be None if all the heads are pruned
-        if len(index) == 0:
+        if len(kv_index) == 0:
             self.wq = None
             self.wk = None
             self.wv = None
             self.out_proj = None
         else:
             half = next(self.wq.parameters()).dtype == torch.float16
-            self.wq = prune_linear_layer(self.wq, qk_index)
-            self.wk = prune_linear_layer(self.wk, qk_index)
-            self.wv = prune_linear_layer(self.wv, vo_index)
-            self.out_proj = prune_linear_layer(self.out_proj, vo_index, dim=1)
+            self.wq = prune_linear_layer(self.wq, qo_index)
+            self.wk = prune_linear_layer(self.wk, kv_index)
+            self.wv = prune_linear_layer(self.wv, kv_index)
+            self.out_proj = prune_linear_layer(self.out_proj, qo_index, dim=1)
             if half:
                 self.wq.half()
                 self.wk.half()
                 self.wv.half()
                 self.out_proj.half()
 
-        print(f"    Heads: {self.n_heads} -> {self.n_heads - len(heads)}")
+        print(f"    KV Heads: {self.n_kv_heads} -> {self.n_kv_heads - len(heads_kv)}")
 
         # Update hyper params and store pruned heads
-        self.n_heads = self.n_heads - len(heads)
-        # Update num_key_value_heads proportionally for GQA
-        if self.num_key_value_groups > 1:
-            self.num_key_value_heads = self.n_heads // self.num_key_value_groups
-        else:
-            self.num_key_value_heads = self.n_heads
+        self.n_kv_heads = self.n_kv_heads - len(heads_kv)
+        self.n_heads = self.n_kv_heads * self.n_kv_groups
+        self.kv_hidden_size = self.n_kv_heads * self.head_dim
+        self.q_hidden_size = self.n_heads * self.head_dim
         self.all_head_size = self.head_dim * self.n_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
+        self.pruned_heads = self.pruned_heads.union(heads_kv)
             
     def forward(
         self,
@@ -586,10 +611,8 @@ class LlamaAttention(nn.Module):
         head_z=None,
         head_layer_z=None,
         hidden_z=None,
-        qk_head_dim_z=None,
-        vo_head_dim_z=None):
-
-        # import pdb; pdb.set_trace()
+        qo_head_dim_z=None,
+        kv_head_dim_z=None):
 
         # qkv = self.Wqkv(x)
         # query, key, value = qkv.chunk(3, dim=2)
@@ -600,9 +623,23 @@ class LlamaAttention(nn.Module):
         key = self.wk(x)
         value = self.wv(x)
 
-        if qk_head_dim_z is not None:
-            query = query.mul(qk_head_dim_z)
-            value = value.mul(vo_head_dim_z)
+        qo_head_dim_z = self._expand_kv_dim_mask_to_qo(qo_head_dim_z)
+
+        if qo_head_dim_z is not None:
+            query = query.mul(qo_head_dim_z)
+        if kv_head_dim_z is not None:
+            key = key.mul(kv_head_dim_z)
+            value = value.mul(kv_head_dim_z)
+
+        attn_head_z = head_z
+        if attn_head_z is not None:
+            if attn_head_z.numel() == self.n_kv_heads:
+                repeat_dim = -2 if attn_head_z.dim() > 1 else 0
+                attn_head_z = torch.repeat_interleave(attn_head_z, self.n_kv_groups, dim=repeat_dim)
+            elif attn_head_z.numel() != self.n_heads:
+                raise ValueError(
+                    f"Unexpected head_z size {attn_head_z.numel()}, expected {self.n_kv_heads} or {self.n_heads}."
+                )
         
         query_padding_mask = None
         if key_padding_mask is not None:
@@ -613,8 +650,8 @@ class LlamaAttention(nn.Module):
 
         # b, s, d = query.shape
         query = rearrange(query, 'b s (h d) -> b h s d', h=self.n_heads)
-        key = rearrange(key, 'b s (h d) -> b h s d', h=self.num_key_value_heads)
-        value = rearrange(value, 'b s (h d) -> b h s d', h=self.num_key_value_heads)
+        key = rearrange(key, 'b s (h d) -> b h s d', h=self.n_kv_heads)
+        value = rearrange(value, 'b s (h d) -> b h s d', h=self.n_kv_heads)
         
         kv_seq_len = key.size(2)
         offset = 0
@@ -624,17 +661,16 @@ class LlamaAttention(nn.Module):
         cos, sin = self.rotary_emb(value, seq_len=kv_seq_len)
         query, key = apply_rotary_pos_emb(query, key, cos, sin, offset=offset)
 
-        # Expand K and V heads for GQA: repeat each KV head num_key_value_groups times
-        if self.num_key_value_groups > 1:
-            key = key.repeat_interleave(self.num_key_value_groups, dim=1)
-            value = value.repeat_interleave(self.num_key_value_groups, dim=1)
+        if self.n_kv_heads != self.n_heads:
+            key = torch.repeat_interleave(key, self.n_kv_groups, dim=1)
+            value = torch.repeat_interleave(value, self.n_kv_groups, dim=1)
 
         offset = 0
         if past_key_value is not None:
             if len(past_key_value) != 0:
                 offset = past_key_value[0].shape[-2]
-                key = torch.cat([past_key_value[0], key], dim=1)
-                value = torch.cat([past_key_value[1], value], dim=1)
+                key = torch.cat([past_key_value[0], key], dim=2)
+                value = torch.cat([past_key_value[1], value], dim=2)
                 past_key_value = (key, value)
 
         if self.attn_fn == flash_attn_fn:
@@ -653,7 +689,7 @@ class LlamaAttention(nn.Module):
                 dropout_p=self.attn_dropout_p,
                 training=self.training,
                 needs_weights=needs_weights,
-                head_z=head_z
+                head_z=attn_head_z
             )
         else:
             context = self.attn_fn(
@@ -661,7 +697,7 @@ class LlamaAttention(nn.Module):
                 key=key,
                 value=value,
                 attention_mask=attention_mask,
-                head_z=head_z
+                head_z=attn_head_z
             )
             attn_weights = None
 
@@ -814,7 +850,6 @@ def flash_attn_fn(
     try:
         from flash_attn import bert_padding  # type: ignore
         from flash_attn import flash_attn_interface  # type: ignore
-        from flash_attn import flash_attn_func, flash_attn_varlen_func
     except ImportError as e:
         raise e
 
@@ -843,20 +878,18 @@ def flash_attn_fn(
 
     dropout_p = dropout_p if training else 0.0
     
-
-    output_unpad = flash_attn_varlen_func(
-        q=query_unpad,
-        k=key_unpad,
-        v=value_unpad,
-        cu_seqlens_q=cu_seqlens_q,
-        cu_seqlens_k=cu_seqlens_k,
-        max_seqlen_q=max_seqlen_q,
-        max_seqlen_k=max_seqlen_k,
-        dropout_p=dropout_p,
+    output_unpad = flash_attn_interface.flash_attn_unpadded_func(
+        query_unpad,
+        key_unpad,
+        value_unpad,
+        cu_seqlens_q,
+        cu_seqlens_k,
+        max_seqlen_q,
+        max_seqlen_k,
+        dropout_p,
         softmax_scale=softmax_scale,
         causal=is_causal,
-        return_attn_probs=needs_weights,
-    )
+        return_attn_probs=needs_weights)
 
     if head_z is not None:
         output_unpad = output_unpad * head_z # 1 * h * 1
@@ -927,4 +960,3 @@ def prepare_decoder_attention_mask(input_shape, inputs_embeds):
         combined_attention_mask = _make_causal_mask(input_shape, inputs_embeds.dtype).to(inputs_embeds.device)
 
     return combined_attention_mask
-

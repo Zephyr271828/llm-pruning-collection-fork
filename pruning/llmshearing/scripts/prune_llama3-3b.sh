@@ -1,19 +1,20 @@
 #!/bin/bash
 
-#SBATCH --job-name=prune_2.7b_%j
-#SBATCH --output=logs/prune_2.7b_%j.out
-#SBATCH --error=logs/prune_2.7b_%j.err
-
+#SBATCH --job-name=prune_llama3_3b_%j
+#SBATCH --output=logs/prune_llama3_3b_%j.out
+#SBATCH --error=logs/prune_llama3_3b_%j.err
+#SBATCH --partition=sfscai
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
 
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=384GB
-#SBATCH --time=1:00:00
-#SBATCH --gres=gpu:4
+#SBATCH --mem=256G
+#SBATCH --gres=gpu:h20:2
+#SBATCH --time=24:00:00
 
 #SBATCH --mail-type=all
-#SBATCH --mail-user=yx1168@princeton.edu
+#SBATCH --mail-user=yx3038@nyu.edu
+#SBATCH --requeue
+
 
 # pruning llama3.1 8b -> target architecture
 
@@ -26,7 +27,7 @@ conda activate llmshearing
 
 # Please specify the working folder
 PROJ_DIR=$(pwd)
-DATA_DIR=${PROJ_DIR}/llmshearing/data/redpajama/for_prune
+DATA_DIR=${PROJ_DIR}/llmshearing/data/redpajama/for_prune_llama3
 OUTPUT_DIR=${PROJ_DIR}/../../checkpoints/llmshearing
 TRAIN_SCRIPT=${PROJ_DIR}/llmshearing/train.py
 MODEL_PATH=${PROJ_DIR}/../../checkpoints/llmshearing/Llama-3.1-8B-composer
@@ -45,17 +46,17 @@ data_local=${DATA_DIR}
 
 # basic setup
 num_gpus=${SLURM_GPUS_ON_NODE:-1}
-max_seq_len=4096
+max_seq_len=8192
 device_train_microbatch_size=1
-global_train_batch_size=32
+global_train_batch_size=16
 device_eval_batch_size=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # learning setup
 lr=1e-4 # learning rate for the main parameters
-max_duration=1600ba # 0.42B tokens
-save_interval=1600ba # save in the end
-t_warmup=160ba # 10% learning rate warmup 
+max_duration=3200ba # 0.42B tokens
+save_interval=3200ba # save in the end
+t_warmup=320ba # 10% learning rate warmup 
 
 # dynamic loading setup
 dynamic=True
@@ -74,7 +75,7 @@ eval_interval=800ba # eval every 50 batches and update the loading proportion
 
 # pruning setup
 lag_lr=1.0 # learning rate or l0_module
-lagr_warmup=320ba # 20% sparsity warmup
+lagr_warmup=640ba # 20% sparsity warmup
 if [[ $to_model == 3b ]]; then
     target_d_model=2560; target_n_heads=20; target_n_kv_heads=5; target_n_layers=32; target_intermediate_size=8960
 fi
@@ -127,6 +128,7 @@ SCRIPT_ARGS=(
     model.l0_module.eval_target_model=${eval_target_model} 
     model.l0_module.target_model.d_model=${target_d_model} 
     model.l0_module.target_model.n_heads=${target_n_heads} 
+    model.l0_module.target_model.n_kv_heads=${target_n_kv_heads} 
     model.l0_module.target_model.n_layers=${target_n_layers} 
     model.l0_module.target_model.intermediate_size=${target_intermediate_size} 
     callbacks.data_loading.dynamic=${dynamic} 
@@ -137,25 +139,40 @@ SCRIPT_ARGS=(
     train_loader.num_workers=0 
     train_loader.prefetch_factor=null 
     train_loader.persistent_workers=false 
-    autoresume=false
+    autoresume=true
 )
 
 get_random_port() {
     python -c "import socket; s=socket.socket(); s.bind(('', 0)); print(s.getsockname()[1])"
 }
 
-export MASTER_PORT=$(get_random_port)
+run_experiment() {
+    export MASTER_PORT=$(get_random_port)
 
-if [[ $num_nodes -gt 1 ]]; then
-    srun torchrun \
-        --nnodes=${num_nodes} \
-        --nproc_per_node=${num_gpus} \
-        --rdzv_id=${RANDOM} \
-        --rdzv_backend=c10d \
-        --rdzv_endpoint=${head_node_ip}:${MASTER_PORT} \
-        "${SCRIPT_ARGS[@]}"
-else
-    torchrun --nproc_per_node=${num_gpus} --master_port=${MASTER_PORT} "${SCRIPT_ARGS[@]}"
-fi
-    
-    
+    echo $num_nodes
+    if [[ $num_nodes -gt 1 ]]; then
+        srun torchrun \
+            --nnodes=${num_nodes} \
+            --nproc_per_node=${num_gpus} \
+            --rdzv_id=${RANDOM} \
+            --rdzv_backend=c10d \
+            --rdzv_endpoint=${head_node_ip}:${MASTER_PORT} \
+            "${SCRIPT_ARGS[@]}"
+    else
+        echo "GPUs on this node: $num_gpus"
+        export NODE_RANK=0
+        torchrun --nproc_per_node=${num_gpus} --master_port=${MASTER_PORT} "${SCRIPT_ARGS[@]}"
+    fi
+
+}
+
+# run experiments with retries
+for i in {1..3}; do
+    echo "Attempt $i to run the experiment..."
+    if run_experiment; then
+        echo "Experiment completed successfully!"
+        break
+    else
+        echo "Experiment failed on attempt $i. Retrying..."
+    fi
+done

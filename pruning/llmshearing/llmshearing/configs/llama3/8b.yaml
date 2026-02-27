@@ -17,6 +17,7 @@ model:
   n_kv_heads: 8  # GQA: 4 query heads per KV head
   n_layers: 32
   intermediate_size: 14336
+  rope_theta: 500000.0
   max_seq_len: ${max_seq_len}
   vocab_size: 128256  # Llama3 has larger vocab
   init_std: 0.02

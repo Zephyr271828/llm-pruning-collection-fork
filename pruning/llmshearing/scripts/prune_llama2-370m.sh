@@ -140,10 +140,14 @@ SCRIPT_ARGS="$TRAIN_SCRIPT \
     train_loader.num_workers=0 \
     train_loader.prefetch_factor=null \
     train_loader.persistent_workers=false \
-    autoresume=false"
+    autoresume=true"
 
-# CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
-# python $TRAIN_SCRIPT \
+get_random_port() {
+    python -c "import socket; s=socket.socket(); s.bind(('', 0)); print(s.getsockname()[1])"
+}
+
+export MASTER_PORT=$(get_random_port)
+
 if [[ $num_nodes -gt 1 ]]; then
     srun torchrun \
         --nnodes=${num_nodes} \
@@ -151,8 +155,9 @@ if [[ $num_nodes -gt 1 ]]; then
         --rdzv_id=${RANDOM} \
         --rdzv_backend=c10d \
         --rdzv_endpoint=${head_node_ip}:54224 \
-        $SCRIPT_ARGS
+        --master_port=${MASTER_PORT} \
+        "${SCRIPT_ARGS[@]}"
 else
-    torchrun --nproc_per_node=${num_gpus} $SCRIPT_ARGS
+    torchrun --nproc_per_node=${num_gpus} --master_port=${MASTER_PORT} "${SCRIPT_ARGS[@]}"
 fi
     

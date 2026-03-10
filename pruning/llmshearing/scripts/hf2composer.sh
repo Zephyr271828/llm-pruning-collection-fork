@@ -1,12 +1,12 @@
 #!/bin/bash
 
-source $(conda info --base)/etc/profile.d/conda.sh
-conda activate llmshearing
-
 PROJ_DIR=$(pwd)
-HF_MODEL_NAME=meta-llama/Llama-2-7b-hf
+# HF_MODEL_NAME=meta-llama/Llama-2-7b-hf
 # HF_MODEL_NAME=/n/fs/vision-mix/yx1168/model_ckpts/Llama-2-7b-hf
-OUTPUT_PATH=${PROJ_DIR}/../../checkpoints/llmshearing/Llama-2-7b-composer/state_dict.pt
+# HF_MODEL_NAME=/scratch/yx3038/cache/Llama-2-7b-hf
+# OUTPUT_PATH=${PROJ_DIR}/../../checkpoints/llmshearing/Llama-2-7b-composer/state_dict.pt
+HF_MODEL_NAME=/scratch/yx3038/cache/Llama-3.1-8B
+OUTPUT_PATH=${PROJ_DIR}/../../checkpoints/llmshearing/Llama-3.1-8B-composer/state_dict.pt
 
 # Create the necessary directory if it doesn't exist
 mkdir -p $(dirname $OUTPUT_PATH)

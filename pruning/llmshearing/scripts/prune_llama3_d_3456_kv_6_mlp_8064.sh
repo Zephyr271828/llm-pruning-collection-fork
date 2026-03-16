@@ -7,7 +7,7 @@
 #SBATCH --nodes=1
 
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=256G
+#SBATCH --mem=320G
 #SBATCH --gres=gpu:h20:4
 #SBATCH --time=48:00:00
 
@@ -44,7 +44,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 lr=1e-4
 max_duration=3200ba
-save_interval=3200ba
+save_interval=400ba
 t_warmup=320ba
 
 dynamic=True

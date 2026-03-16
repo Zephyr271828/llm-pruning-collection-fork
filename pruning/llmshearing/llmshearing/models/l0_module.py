@@ -175,17 +175,22 @@ class L0Module(nn.Module):
         
     
     def set_model_info(self, cfg, n_matrix_mlp):
-        ns = NS() 
+        ns = NS()
         ns.hidden_size = cfg.d_model
         ns.intermediate_size = cfg.intermediate_size
         ns.num_attention_heads = cfg.n_heads
+        ns.num_kv_heads = getattr(cfg, 'n_kv_heads', cfg.n_heads)
+        ns.num_kv_groups = ns.num_attention_heads // ns.num_kv_heads
         ns.mlp_num_per_layer = 1
-        ns.dim_per_head = ns.hidden_size // ns.num_attention_heads 
+        ns.dim_per_head = ns.hidden_size // ns.num_attention_heads
         ns.num_layers = cfg.n_layers
         ns.vocab_size = cfg.vocab_size
 
-        ns.params_per_head_layer = ns.hidden_size * ns.hidden_size * 4
-        ns.params_per_head =  ns.params_per_head_layer // ns.num_attention_heads
+        # Q+O use n_heads * head_dim; K+V use n_kv_heads * head_dim
+        ns.params_per_head_layer = ns.hidden_size * ns.dim_per_head * (
+            2 * ns.num_attention_heads + 2 * ns.num_kv_heads
+        )
+        ns.params_per_head = ns.params_per_head_layer // ns.num_kv_heads  # per KV group
         ns.params_per_mlp_layer = ns.hidden_size * ns.intermediate_size * n_matrix_mlp
         ns.params_per_intermediate_dim = ns.params_per_mlp_layer // ns.intermediate_size
 
@@ -235,14 +240,14 @@ class L0Module(nn.Module):
         self.masks["hidden"] = hidden_mask
 
     def initialize_head(self):
-        mask_shape = [self.base_model_info.num_layers, self.base_model_info.num_attention_heads]
+        mask_shape = [self.base_model_info.num_layers, self.base_model_info.num_kv_heads]
         num_params_per_mask = self.base_model_info.params_per_head
-        mask_output_shape = [self.base_model_info.num_layers, 1, self.base_model_info.num_attention_heads, 1] 
-        
-        target_head_sparsity = None; pd = {} ; target_mask_size=None; 
+        mask_output_shape = [self.base_model_info.num_layers, 1, self.base_model_info.num_kv_heads, 1]
+
+        target_head_sparsity = None; pd = {} ; target_mask_size=None;
         if self.target_model_info is not None:
-            target_head_sparsity = 1 - self.target_model_info.num_attention_heads / self.base_model_info.num_attention_heads
-            target_mask_size = self.target_model_info.num_attention_heads
+            target_head_sparsity = 1 - self.target_model_info.num_kv_heads / self.base_model_info.num_kv_heads
+            target_mask_size = self.target_model_info.num_kv_heads
             pd = {"lambda_1_head": torch.nn.Parameter(torch.tensor(0.0, device=self.device)),
                   "lambda_2_head": torch.nn.Parameter(torch.tensor(0.0, device=self.device))}
             self.lambdas.update(pd)

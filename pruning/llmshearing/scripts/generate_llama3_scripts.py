@@ -25,7 +25,7 @@ def make_llama3_prune_slurm_script(
     device_eval_batch_size: int = 1,
     lr: str = "1e-4",
     max_duration: str = "3200ba",
-    save_interval: str = "3200ba",
+    save_interval: str = "400ba",
     t_warmup: str = "320ba",
     eval_interval: str = "800ba",
     update_type: str = "doremi",
@@ -124,7 +124,7 @@ def make_llama3_prune_slurm_script(
 #SBATCH --nodes=1
 
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=256G
+#SBATCH --mem=320G
 #SBATCH --gres=gpu:h20:4
 #SBATCH --time=48:00:00
 

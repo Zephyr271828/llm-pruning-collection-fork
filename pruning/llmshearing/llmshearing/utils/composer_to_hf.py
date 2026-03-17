@@ -71,19 +71,18 @@ def save_hf_to_composer(hf_model_name_or_path, output_path):
 def construct_hf_config(model_config: om = None):
     assert model_config is not None, "model config is None"
     model_class = model_config.pop("model_class")
-    
+    # Pop tokenizer_name so it is not written as an HF config attribute.
+    # Use it as the base model path so the correct architecture config is loaded.
+    tokenizer_name = model_config.pop("tokenizer_name", None)
+
     if model_class == "LlamaForCausalLM":
-        # hf_model_name = "meta-llama/Llama-2-7b-hf"
-        # tokenzier_name = "meta-llama/Llama-2-7b-hf"
-        hf_model_name = "/n/fs/vision-mix/yx1168/model_ckpts/Llama-2-7b-hf"
-        tokenizer_name = "/n/fs/vision-mix/yx1168/model_ckpts/Llama-2-7b-hf"
-        config = AutoConfig.from_pretrained(hf_model_name)
-        
+        base_model_path = tokenizer_name if tokenizer_name else "meta-llama/Llama-2-7b-hf"
+        config = AutoConfig.from_pretrained(base_model_path)
+
     for key in model_config:
         setattr(config, key, model_config[key])
-    # import pdb; pdb.set_trace()
-    
-    return config, tokenizer_name 
+
+    return config, tokenizer_name
             
         
 def save_composer_to_hf(composer_model_path, output_path=None, model_config:om = None):

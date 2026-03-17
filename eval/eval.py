@@ -176,10 +176,10 @@ def get_ppl_enc(task, tokenizer):
         testenc = tokenizer.encode(" ".join(dataset[:8000][text_column]), return_tensors='pt', add_special_tokens=True)
     elif task == 'c4':
         dataset = load_dataset(
-            "allenai/c4", 
-            data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, 
-            split="train", 
-            verification_mode="no_checks", 
+            "allenai/c4",
+            "en",
+            split="train",
+            verification_mode="no_checks",
         )
         text_column = "text"
         testenc = tokenizer.encode(" ".join(dataset[:8000][text_column]), return_tensors='pt', add_special_tokens=True)

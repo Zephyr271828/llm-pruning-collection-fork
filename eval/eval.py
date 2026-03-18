@@ -303,17 +303,6 @@ def main(args):
     acc_tasks = [t for t in ACC_TASKS if t['name'] in args.tasks]
     acc_res = get_acc(model, tokenizer, limit=args.limit, tasks=acc_tasks)
     
-    if args.eval_noise:
-        for noise_scale in [0.001, 0.01, 0.1]:
-            print(f"running eval with noise scale {noise_scale}")
-            get_ppl(model, tokenizer, tasks=PPL_TASKS, noise_scale=noise_scale)
-            get_acc(
-                model, 
-                tokenizer, 
-                tasks={k:v for k, v in TASK_CONFIG.items() if k in ['winogrande', 'arc_challenge', 'arc_easy', 'hellaswag']},
-                noise_scale=noise_scale
-            )
-    
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--hf_path", type=str, default=None, help="Path to HF checkpoint (.pth)")

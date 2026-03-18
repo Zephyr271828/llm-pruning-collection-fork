@@ -1,6 +1,6 @@
 #!/bin/bash
 
-hf_model_path=meta-llama/Llama-3.1-8B
+hf_model_path=/mnt/weka/home/yucheng/yufeng/llm-pruning-collection-fork-llmshearing/checkpoints/llmshearing/llama3_8b_pruning_scaling_doremi_h_3072_kv_4_mlp_10112_sl8192_bs1_3200ba/hf_pruned_2
 tasks=(
     c4
     wikitext

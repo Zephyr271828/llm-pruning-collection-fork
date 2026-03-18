@@ -35,12 +35,24 @@ path=$MODEL_PATH/state_dict.pt
 
 data_local=${DATA_DIR}
 
-num_gpus=${SLURM_GPUS_ON_NODE:-1}
-max_seq_len=8192
+# num_gpus=${SLURM_GPUS_ON_NODE:-1}
+
+num_gpus=${NUM_GPUS:-4}
+source scripts/utils.sh
+export CUDA_VISIBLE_DEVICES=$(get_free_gpus $num_gpus)
+echo "Using gpus $CUDA_VISIBLE_DEVICES"
+
+max_seq_len=4096
 device_train_microbatch_size=1
-global_train_batch_size=16
+global_train_batch_size=32
 device_eval_batch_size=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+# NCCL stability flags to avoid intermittent connection errors
+export NCCL_SOCKET_TIMEOUT=600000
+export NCCL_SOCKET_NRETRY=10
+export NCCL_DEBUG=WARN
+export NCCL_SOCKET_IFNAME=^lo,docker0
 
 lr=1e-4
 max_duration=3200ba
@@ -54,7 +66,7 @@ update_type=doremi
 target_loss=[2.2429,0.8238,2.2426,1.8683,1.6786,1.2740,2.3734]
 eval_split_name=eval_merge
 eval_target_model=false
-eval_interval=800ba
+eval_interval=100ba
 
 lag_lr=1.0
 lagr_warmup=640ba
@@ -62,11 +74,12 @@ lagr_warmup=640ba
 target_d_model=3072; target_n_heads=20; target_n_kv_heads=5; target_n_layers=32; target_intermediate_size=9984
 
 TIME=$(date +%Y%m%d_%H%M%S)
-run_name=llama3_8b_pruning_scaling_doremi_h_${target_d_model}_kv_${target_n_kv_heads}_mlp_${target_intermediate_size}_sl8192_bs1_3200ba
+run_name=llama3_8b_pruning_scaling_doremi_h_${target_d_model}_kv_${target_n_kv_heads}_mlp_${target_intermediate_size}_sl4096_bs1_3200ba
 save_dir=${OUTPUT_DIR}/${run_name}
 wandb_dir=${save_dir}
 
-num_nodes=${SLURM_JOB_NUM_NODES}
+# num_nodes=${SLURM_JOB_NUM_NODES}
+num_nodes=1
 echo "SLURM_JOB_NUM_NODES: $num_nodes"
 if [[ $num_nodes -gt 1 ]]; then
     node_rank=${SLURM_NODEID}

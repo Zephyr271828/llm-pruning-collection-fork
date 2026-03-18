@@ -38,6 +38,7 @@ print(hidden_size, n_heads, n_kv_heads, num_layers, intermediate_size, vocab_siz
             num_key_value_heads=${NUM_KEY_VALUE_HEADS} \
             vocab_size=${VOCAB_SIZE} \
             tokenizer_name=${TOKENIZER_NAME} \
+            rope_theta=500000 \
             _name_or_path=${MODEL_NAME}
 }
 

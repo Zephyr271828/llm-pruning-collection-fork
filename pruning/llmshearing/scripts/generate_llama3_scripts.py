@@ -19,9 +19,9 @@ def make_llama3_prune_slurm_script(
     # fixed knobs (edit defaults if you want)
     n_layers: int = 32,
     from_model: str = "8b",
-    max_seq_len: int = 8192,
+    max_seq_len: int = 4096,
     device_train_microbatch_size: int = 1,
-    global_train_batch_size: int = 16,
+    global_train_batch_size: int = 32,
     device_eval_batch_size: int = 1,
     lr: str = "1e-4",
     max_duration: str = "3200ba",
@@ -152,12 +152,24 @@ path=$MODEL_PATH/state_dict.pt
 
 data_local=${{DATA_DIR}}
 
-num_gpus=${{SLURM_GPUS_ON_NODE:-1}}
+# num_gpus=${{SLURM_GPUS_ON_NODE:-1}}
+
+num_gpus=${{NUM_GPUS:-4}}
+source scripts/utils.sh
+export CUDA_VISIBLE_DEVICES=$(get_free_gpus $num_gpus)
+echo "Using gpus $CUDA_VISIBLE_DEVICES"
+
 max_seq_len={max_seq_len}
 device_train_microbatch_size={device_train_microbatch_size}
 global_train_batch_size={global_train_batch_size}
 device_eval_batch_size={device_eval_batch_size}
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+# NCCL stability flags to avoid intermittent connection errors
+export NCCL_SOCKET_TIMEOUT=600000
+export NCCL_SOCKET_NRETRY=10
+export NCCL_DEBUG=WARN
+export NCCL_SOCKET_IFNAME=^lo,docker0
 
 lr={lr}
 max_duration={max_duration}
@@ -183,7 +195,8 @@ run_name=llama3_{from_model}_pruning_scaling_{update_type}_h_${{target_d_model}}
 save_dir=${{OUTPUT_DIR}}/${{run_name}}
 wandb_dir=${{save_dir}}
 
-num_nodes=${{SLURM_JOB_NUM_NODES}}
+# num_nodes=${{SLURM_JOB_NUM_NODES}}
+num_nodes=1
 echo "SLURM_JOB_NUM_NODES: $num_nodes"
 if [[ $num_nodes -gt 1 ]]; then
     node_rank=${{SLURM_NODEID}}

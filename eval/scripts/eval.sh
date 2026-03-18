@@ -1,27 +1,32 @@
 #!/bin/bash
 
-hf_model_path=/mnt/weka/home/yucheng/yufeng/llm-pruning-collection-fork-llmshearing/checkpoints/llmshearing/llama3_8b_pruning_scaling_doremi_h_3072_kv_4_mlp_10112_sl8192_bs1_3200ba/hf_pruned_2
+source $(conda info --base)/etc/profile.d/conda.sh
+conda activate llamafactory_sdar
+
+# hf_model_path=/mnt/weka/home/yucheng/yufeng/llm-pruning-collection-fork-llmshearing/checkpoints/llmshearing/llama3_8b_pruning_scaling_doremi_h_3072_kv_4_mlp_10112_sl8192_bs1_3200ba/hf_pruned_2
+# hf_model_path=/mnt/weka/home/yucheng/yufeng/llm-pruning-collection-fork-llmshearing/checkpoints/llmshearing/llama3_8b_pruning_scaling_doremi_h_3456_kv_4_mlp_8192_sl4096_bs1_3200ba/hf-pruned
+hf_model_path=/mnt/weka/home/yucheng/yufeng/model_ckpts/Llama-2-7b-hf
 tasks=(
-    c4
-    wikitext
-    wikitext2
-    cnn_dailymail
+    # c4
+    # wikitext
+    # wikitext2
+    # cnn_dailymail
     winogrande
     arc_easy
     arc_challenge
     hellaswag
-    truthfulqa_mc1
-    truthfulqa_mc2
+    # truthfulqa_mc1
+    # truthfulqa_mc2
     piqa
-    sciq
+    # sciq
     boolq
-    anli_r1
-    anli_r2
-    anli_r3
-    openbookqa
-    rte
-    mmlu
-    record
+    # anli_r1
+    # anli_r2
+    # anli_r3
+    # openbookqa
+    # rte
+    # mmlu
+    # record
 )
 
 PROJ_DIR=$(pwd)

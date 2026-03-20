@@ -100,7 +100,7 @@ def save_composer_to_hf(composer_model_path, output_path=None, model_config:om =
     num_layers = get_layer_num_from_weights(weights)
     keymap = get_key_map_from_composer_to_hf(num_layers)
     # import pdb; pdb.set_trace()
-    hf_weights = {keymap[key]: weights[key] for key in weights if "rotary" not in key}
+    hf_weights = {keymap[key]: weights[key] for key in weights if "rotary" not in key and key in keymap}
     config, tokenizer_nanme = construct_hf_config(model_config)
 
     model = AutoModelForCausalLM.from_config(config)

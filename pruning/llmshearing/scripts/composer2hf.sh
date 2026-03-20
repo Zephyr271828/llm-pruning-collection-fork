@@ -57,5 +57,15 @@ if "state" in w:
             _name_or_path=${MODEL_NAME}
 }
 
+<<<<<<< HEAD
 echo "Converting model in $MODEL_DIR"
 convert_hf "$MODEL_DIR"
+=======
+# for model_dir in /scratch/yx3038/pruning/llm-pruning-collection-fork-llmshearing/checkpoints/llmshearing/llama3_8b*; do
+#     [ -d "$model_dir" ] || continue
+#     echo "Converting model in $model_dir"
+#     convert_hf "$model_dir"
+# done
+
+convert_hf $MODEL_DIR
+>>>>>>> 9daf96e2972771f23a46e5703d8f4b574b4975e3

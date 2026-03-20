@@ -124,7 +124,7 @@ def make_llama3_prune_slurm_script(
 #SBATCH --nodes=1
 
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=320G
+#SBATCH --mem=384G
 #SBATCH --gres=gpu:h20:4
 #SBATCH --time=48:00:00
 
@@ -243,7 +243,6 @@ SCRIPT_ARGS=(
     train_loader.prefetch_factor=null
     train_loader.persistent_workers=false
     autoresume=true
-    save_overwrite=true
 )
 
 get_random_port() {{

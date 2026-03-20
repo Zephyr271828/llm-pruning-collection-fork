@@ -471,7 +471,7 @@ class LlamaAttention(nn.Module):
         self.out_proj = nn.Linear(self.d_model, self.d_model, device=device, bias=False)
         self.out_proj._is_residual = True  # type: ignore
         
-        self.rotary_emb = LlamaRotaryEmbedding(self.head_dim)
+        self.rotary_emb = LlamaRotaryEmbedding(self.head_dim, base=cfg.get('rope_theta', 10000))
     
     def prune_params(self, zs_block):
         head_z = None; head_layer_z = None; hidden_z = None; qk_head_dim_z = None; vo_head_dim_z = None
@@ -846,7 +846,14 @@ def flash_attn_fn(
     # value_unpad = rearrange(value_unpad, 'nnz (h d) -> nnz h d', h=n_heads)
 
     dropout_p = dropout_p if training else 0.0
-    
+
+    # FlashAttention only supports fp16 and bf16
+    # Convert tensors to appropriate dtype if needed
+    if query_unpad.dtype not in [torch.float16, torch.bfloat16]:
+        dtype = torch.bfloat16
+        query_unpad = query_unpad.to(dtype)
+        key_unpad = key_unpad.to(dtype)
+        value_unpad = value_unpad.to(dtype)
 
     output_unpad = flash_attn_varlen_func(
         q=query_unpad,

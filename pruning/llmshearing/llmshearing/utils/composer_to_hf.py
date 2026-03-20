@@ -71,16 +71,21 @@ def save_hf_to_composer(hf_model_name_or_path, output_path):
 def construct_hf_config(model_config: om = None):
     assert model_config is not None, "model config is None"
     model_class = model_config.pop("model_class")
-    # Pop tokenizer_name so it is not written as an HF config attribute.
-    # Use it as the base model path so the correct architecture config is loaded.
     tokenizer_name = model_config.pop("tokenizer_name", None)
 
     if model_class == "LlamaForCausalLM":
-        base_model_path = tokenizer_name if tokenizer_name else "meta-llama/Llama-2-7b-hf"
-        config = AutoConfig.from_pretrained(base_model_path)
+        from transformers import LlamaConfig
+        # Build config from scratch with provided parameters
+        config_dict = {}
+        for key in model_config:
+            config_dict[key] = model_config[key]
+        config = LlamaConfig(**config_dict)
+    else:
+        raise ValueError(f"Unsupported model class: {model_class}")
 
-    for key in model_config:
-        setattr(config, key, model_config[key])
+    assert tokenizer_name is not None, (
+        "tokenizer_name must be provided in model_config "
+        "(e.g., tokenizer_name=/path/to/Llama-3.1-8B)")
 
     return config, tokenizer_name
             

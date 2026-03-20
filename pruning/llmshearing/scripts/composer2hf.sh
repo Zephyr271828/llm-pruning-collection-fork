@@ -44,37 +44,17 @@ w = torch.load("$MODEL_PATH", map_location="cpu", mmap=True)
 if "state" in w:
     w = w["state"]["model"]
 
-num_layers = max(int(k.split("blocks.")[1].split(".")[0]) for k in w if "blocks." in k) + 1
-vocab_size = w["model.transformer.wte.weight"].shape[0]
-
-print(num_layers, vocab_size)
-PY
-)"
-
-    echo "Parsed dims:"
-    echo "  hidden_size=$HIDDEN_SIZE"
-    echo "  num_attention_heads=$NUM_ATTENTION_HEADS"
-    echo "  num_key_value_heads=$NUM_KEY_VALUE_HEADS"
-    echo "  num_hidden_layers=$NUM_HIDDEN_LAYERS"
-    echo "  intermediate_size=$INTERMEDIATE_SIZE"
-    echo "  vocab_size=$VOCAB_SIZE"
-
-    # exit 0
-
-    python3 -m llmshearing.utils.post_pruning_processing prune_and_save_model "$MODEL_PATH"
-    local PRUNED_PATH="$MODEL_DIR/pruned-$(basename "$MODEL_PATH")"
-
-    python3 -m llmshearing.utils.composer_to_hf save_composer_to_hf "$PRUNED_PATH" "$OUTPUT_PATH" \
-        model_class="${MODEL_CLASS}" \
-        hidden_size="${HIDDEN_SIZE}" \
-        head_dim=128 \
-        num_attention_heads="${NUM_ATTENTION_HEADS}" \
-        num_hidden_layers="${NUM_HIDDEN_LAYERS}" \
-        intermediate_size="${INTERMEDIATE_SIZE}" \
-        num_key_value_heads="${NUM_KEY_VALUE_HEADS}" \
-        vocab_size="${VOCAB_SIZE}" \
-        tokenizer_name="${TOKENIZER_NAME}" \
-        _name_or_path="${MODEL_NAME}"
+    python3 -m llmshearing.utils.composer_to_hf save_composer_to_hf $MODEL_PATH $OUTPUT_PATH \
+            model_class=${MODEL_CLASS} \
+            hidden_size=${HIDDEN_SIZE} \
+            num_attention_heads=${NUM_ATTENTION_HEADS} \
+            num_hidden_layers=${NUM_HIDDEN_LAYERS} \
+            intermediate_size=${INTERMEDIATE_SIZE} \
+            num_key_value_heads=${NUM_KEY_VALUE_HEADS} \
+            vocab_size=${VOCAB_SIZE} \
+            tokenizer_name=${TOKENIZER_NAME} \
+            rope_theta=500000 \
+            _name_or_path=${MODEL_NAME}
 }
 
 echo "Converting model in $MODEL_DIR"

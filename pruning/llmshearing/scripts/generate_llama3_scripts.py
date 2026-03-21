@@ -114,12 +114,14 @@ def make_llama3_prune_slurm_script(
     target_loss_bash = losses_out
 
     out_path = f"scripts/prune_llama3_d_{d_model}_kv_{n_kv_heads}_mlp_{mlp_size}.sh"
+    
+    os.makedirs(f"logs/prune_llama3_d_{d_model}_kv_{n_kv_heads}_mlp_{mlp_size}", exist_ok=True)
 
     script = f"""#!/bin/bash
 
 #SBATCH --job-name=prune_llama3_d_{d_model}_kv_{n_kv_heads}_mlp_{mlp_size}_%j
-#SBATCH --output=logs/prune_llama3_d_{d_model}_kv_{n_kv_heads}_mlp_{mlp_size}_%j.out
-#SBATCH --error=logs/prune_llama3_d_{d_model}_kv_{n_kv_heads}_mlp_{mlp_size}_%j.err
+#SBATCH --output=logs/prune_llama3_d_{d_model}_kv_{n_kv_heads}_mlp_{mlp_size}/%j.out
+#SBATCH --error=logs/prune_llama3_d_{d_model}_kv_{n_kv_heads}_mlp_{mlp_size}/%j.err
 #SBATCH --partition=sfscai
 #SBATCH --nodes=1
 
@@ -166,10 +168,14 @@ device_eval_batch_size={device_eval_batch_size}
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # NCCL stability flags to avoid intermittent connection errors
-export NCCL_SOCKET_TIMEOUT=600000
-export NCCL_SOCKET_NRETRY=10
-export NCCL_DEBUG=WARN
-export NCCL_SOCKET_IFNAME=^lo,docker0
+# export NCCL_SOCKET_TIMEOUT=600000
+# export NCCL_SOCKET_NRETRY=10
+# export NCCL_DEBUG=WARN
+# export NCCL_SOCKET_IFNAME=^lo,docker0
+# export NCCL_DEBUG=INFO                                                                                                                                                       
+# export NCCL_DEBUG_SUBSYS=ALL        
+export NCCL_IB_DISABLE=1      
+# export NCCL_SOCKET_IFNAME=lo  
 
 lr={lr}
 max_duration={max_duration}
@@ -272,6 +278,7 @@ for i in {{1..3}}; do
         break
     else
         echo "Experiment failed on attempt $i. Retrying..."
+        sleep 10
     fi
 done
 """

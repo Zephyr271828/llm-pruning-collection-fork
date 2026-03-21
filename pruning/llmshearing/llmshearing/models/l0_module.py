@@ -150,8 +150,8 @@ class L0Module(nn.Module):
         
         # l0 params
         self.lambdas = {}
-        self.lambdas["lambda_1"] = torch.nn.Parameter(torch.tensor(0.0, device=device))
-        self.lambdas["lambda_2"] = torch.nn.Parameter(torch.tensor(0.0, device=device))
+        self.lambdas["lambda_1"] = torch.nn.Parameter(torch.zeros(1, device=device))
+        self.lambdas["lambda_2"] = torch.nn.Parameter(torch.zeros(1, device=device))
         self.masks = {}
         for pruning_module in self.pruning_modules:
             self.initialize_one_module(pruning_module)
@@ -225,8 +225,8 @@ class L0Module(nn.Module):
         if self.target_model_info is not None:
             target_hidden_sparsity = 1 - self.target_model_info.hidden_size / self.base_model_info.hidden_size
             target_mask_size = self.target_model_info.hidden_size
-            pd = {"lambda_1_hidden": torch.nn.Parameter(torch.tensor(0.0, device=self.device)),
-                  "lambda_2_hidden": torch.nn.Parameter(torch.tensor(0.0, device=self.device))}
+            pd = {"lambda_1_hidden": torch.nn.Parameter(torch.zeros(1, device=self.device)),
+                  "lambda_2_hidden": torch.nn.Parameter(torch.zeros(1, device=self.device))}
             self.lambdas.update(pd)
         
         hidden_mask = Mask(name="hidden",
@@ -248,8 +248,8 @@ class L0Module(nn.Module):
         if self.target_model_info is not None:
             target_head_sparsity = 1 - self.target_model_info.num_kv_heads / self.base_model_info.num_kv_heads
             target_mask_size = self.target_model_info.num_kv_heads
-            pd = {"lambda_1_head": torch.nn.Parameter(torch.tensor(0.0, device=self.device)),
-                  "lambda_2_head": torch.nn.Parameter(torch.tensor(0.0, device=self.device))}
+            pd = {"lambda_1_head": torch.nn.Parameter(torch.zeros(1, device=self.device)),
+                  "lambda_2_head": torch.nn.Parameter(torch.zeros(1, device=self.device))}
             self.lambdas.update(pd)
         head_mask = Mask(name="head",
                          mask_shape=mask_shape,
@@ -269,8 +269,8 @@ class L0Module(nn.Module):
         target_qk_head_dim_sparsity = None; pd = {} 
         if self.target_model_info is not None:
             target_qk_head_dim_sparsity = 1 - self.target_model_info.hidden_size / self.base_model_info.hidden_size
-            pd = {"lambda_1_qk_head_dim": torch.nn.Parameter(torch.tensor(0.0, device=self.device)),
-                  "lambda_2_qk_head_dim": torch.nn.Parameter(torch.tensor(0.0, device=self.device))}
+            pd = {"lambda_1_qk_head_dim": torch.nn.Parameter(torch.zeros(1, device=self.device)),
+                  "lambda_2_qk_head_dim": torch.nn.Parameter(torch.zeros(1, device=self.device))}
             self.lambdas.update(pd)
         qk_head_dim = Mask(name="qk_head_dim",
                          mask_shape=mask_shape,
@@ -290,8 +290,8 @@ class L0Module(nn.Module):
         target_vo_head_dim_sparsity = None; pd = {} 
         if self.target_model_info is not None:
             target_vo_head_dim_sparsity = 1 - self.target_model_info.hidden_size / self.base_model_info.hidden_size
-            pd = {"lambda_1_vo_head_dim": torch.nn.Parameter(torch.tensor(0.0, device=self.device)),
-                  "lambda_2_vo_head_dim": torch.nn.Parameter(torch.tensor(0.0, device=self.device))}
+            pd = {"lambda_1_vo_head_dim": torch.nn.Parameter(torch.zeros(1, device=self.device)),
+                  "lambda_2_vo_head_dim": torch.nn.Parameter(torch.zeros(1, device=self.device))}
             self.lambdas.update(pd)
         vo_head_dim = Mask(name="vo_head_dim",
                          mask_shape=mask_shape,
@@ -310,8 +310,8 @@ class L0Module(nn.Module):
         if self.target_model_info is not None:
             target_head_layer_sparsity = 1 - self.target_model_info.num_layers / self.base_model_info.num_layers
             target_mask_size = self.target_model_info.num_layers
-            pd = {"lambda_1_head_layer": torch.nn.Parameter(torch.tensor(0.0, device=self.device)),
-                  "lambda_2_head_layer": torch.nn.Parameter(torch.tensor(0.0, device=self.device))}
+            pd = {"lambda_1_head_layer": torch.nn.Parameter(torch.zeros(1, device=self.device)),
+                  "lambda_2_head_layer": torch.nn.Parameter(torch.zeros(1, device=self.device))}
             self.lambdas.update(pd)
         
         head_layer_mask = Mask(name="head_layer",
@@ -333,8 +333,8 @@ class L0Module(nn.Module):
         if self.target_model_info is not None:
             target_int_sparsity = 1 - self.target_model_info.intermediate_size / self.base_model_info.intermediate_size
             target_mask_size = self.target_model_info.intermediate_size
-            pd = {"lambda_1_intermediate": torch.nn.Parameter(torch.tensor(0.0, device=self.device)),
-                  "lambda_2_intermediate": torch.nn.Parameter(torch.tensor(0.0, device=self.device))}
+            pd = {"lambda_1_intermediate": torch.nn.Parameter(torch.zeros(1, device=self.device)),
+                  "lambda_2_intermediate": torch.nn.Parameter(torch.zeros(1, device=self.device))}
             self.lambdas.update(pd)
         
         int_mask = Mask(name="intermediate",
@@ -357,8 +357,8 @@ class L0Module(nn.Module):
         if self.target_model_info is not None:
             target_mlp_sparsity = 1 - self.target_model_info.num_layers / self.base_model_info.num_layers
             target_mask_size = self.target_model_info.num_layers
-            pd = {"lambda_1_mlp": torch.nn.Parameter(torch.tensor(0.0, device=self.device)),
-                  "lambda_2_mlp": torch.nn.Parameter(torch.tensor(0.0, device=self.device))}
+            pd = {"lambda_1_mlp": torch.nn.Parameter(torch.zeros(1, device=self.device)),
+                  "lambda_2_mlp": torch.nn.Parameter(torch.zeros(1, device=self.device))}
             self.lambdas.update(pd)
         
         mlp_mask = Mask(name="mlp",
@@ -380,8 +380,8 @@ class L0Module(nn.Module):
         if self.target_model_info is not None:
             target_layer_sparsity = 1 - self.target_model_info.num_layers / self.base_model_info.num_layers
             target_mask_size = self.target_model_info.num_layers
-            pd = {"lambda_1_layer": torch.nn.Parameter(torch.tensor(0.0, device=self.device)),
-                  "lambda_2_layer": torch.nn.Parameter(torch.tensor(0.0, device=self.device))}
+            pd = {"lambda_1_layer": torch.nn.Parameter(torch.zeros(1, device=self.device)),
+                  "lambda_2_layer": torch.nn.Parameter(torch.zeros(1, device=self.device))}
             self.lambdas.update(pd)
         
         layer_mask = Mask(name="layer",

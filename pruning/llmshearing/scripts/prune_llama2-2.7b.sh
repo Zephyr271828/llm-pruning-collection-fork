@@ -3,24 +3,25 @@
 #SBATCH --job-name=prune_2.7b_%j
 #SBATCH --output=logs/prune_2.7b_%j.out
 #SBATCH --error=logs/prune_2.7b_%j.err
-
+#SBATCH --partition=sfscai
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
 
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=384GB
-#SBATCH --time=1:00:00
-#SBATCH --gres=gpu:4
+#SBATCH --mem=256G
+#SBATCH --gres=gpu:h20:2
+#SBATCH --time=24:00:00
 
 #SBATCH --mail-type=all
-#SBATCH --mail-user=yx1168@princeton.edu
+#SBATCH --mail-user=yx3038@nyu.edu
+#SBATCH --requeue
 
 # pruning llama2 7b -> 2.7b or 1.3b or 370m
 
 set -euo pipefail
 # set +x
 
-source /usr/local/anaconda3/2024.02/etc/profile.d/conda.sh
+# source /usr/local/anaconda3/2024.02/etc/profile.d/conda.sh
+source $(conda info --base)/etc/profile.d/conda.sh
 conda activate llmshearing
 
 # Please specify the working folder
@@ -74,10 +75,9 @@ eval_split_name=eval_merge # eval on all domains
 eval_target_model=false # evaluate on the current model, not the target model, otherwise the loss will be inaccurate
 eval_interval=800ba # eval every 50 batches and update the loading proportion
 
-
 # pruning setup
 lag_lr=1.0 # learning rate or l0_module
-lagr_warmup=$((10240 / global_train_batch_size))ba # 20% sparsity warmup
+lagr_warmup=640ba # 20% sparsity warmup
 if [[ $to_model == 1.3b ]]; then
     target_d_model=2048; target_n_heads=16; target_n_layers=24; target_intermediate_size=5504
 elif [[ $to_model == 2.7b ]]; then
@@ -105,6 +105,9 @@ if [[ $num_nodes -gt 1 ]]; then
     echo "Master address: $master_addr"
     echo "Head node ip: $head_node_ip"
 fi
+
+# export NCCL_IB_DISABLE=1
+# export NCCL_SOCKET_IFNAME=eth
 
 SCRIPT_ARGS=(
     "$TRAIN_SCRIPT"
@@ -141,18 +144,38 @@ SCRIPT_ARGS=(
     train_loader.num_workers=0 
     train_loader.prefetch_factor=null 
     train_loader.persistent_workers=false 
-    autoresume=false
+    autoresume=true
 )
 
-if [[ $num_nodes -gt 1 ]]; then
-    srun torchrun \
-        --nnodes=${num_nodes} \
-        --nproc_per_node=${num_gpus} \
-        --rdzv_id=${RANDOM} \
-        --rdzv_backend=c10d \
-        --rdzv_endpoint=${head_node_ip}:54224 \
-        "${SCRIPT_ARGS[@]}"
-else
-    torchrun --nproc_per_node=${num_gpus} "${SCRIPT_ARGS[@]}"
-fi
+get_random_port() {
+    python -c "import socket; s=socket.socket(); s.bind(('', 0)); print(s.getsockname()[1])"
+}
+
+run_experiment() {
+    export MASTER_PORT=$(get_random_port)
+
+    if [[ $num_nodes -gt 1 ]]; then
+        srun torchrun \
+            --nnodes=${num_nodes} \
+            --nproc_per_node=${num_gpus} \
+            --rdzv_id=${RANDOM} \
+            --rdzv_backend=c10d \
+            --rdzv_endpoint=${head_node_ip}:${MASTER_PORT} \
+            "${SCRIPT_ARGS[@]}"
+    else
+        torchrun --nproc_per_node=${num_gpus} --master_port=${MASTER_PORT} "${SCRIPT_ARGS[@]}"
+    fi
+
+}
+
+# run experiments with retries
+for i in {1..3}; do
+    echo "Attempt $i to run the experiment..."
+    if run_experiment; then
+        echo "Experiment completed successfully!"
+        break
+    else
+        echo "Experiment failed on attempt $i. Retrying..."
+    fi
+done
     

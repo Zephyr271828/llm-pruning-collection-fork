@@ -176,10 +176,10 @@ def get_ppl_enc(task, tokenizer):
         testenc = tokenizer.encode(" ".join(dataset[:8000][text_column]), return_tensors='pt', add_special_tokens=True)
     elif task == 'c4':
         dataset = load_dataset(
-            "allenai/c4", 
-            data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, 
-            split="train", 
-            verification_mode="no_checks", 
+            "allenai/c4",
+            "en",
+            split="train",
+            verification_mode="no_checks",
         )
         text_column = "text"
         testenc = tokenizer.encode(" ".join(dataset[:8000][text_column]), return_tensors='pt', add_special_tokens=True)
@@ -302,17 +302,6 @@ def main(args):
 
     acc_tasks = [t for t in ACC_TASKS if t['name'] in args.tasks]
     acc_res = get_acc(model, tokenizer, limit=args.limit, tasks=acc_tasks)
-    
-    if args.eval_noise:
-        for noise_scale in [0.001, 0.01, 0.1]:
-            print(f"running eval with noise scale {noise_scale}")
-            get_ppl(model, tokenizer, tasks=PPL_TASKS, noise_scale=noise_scale)
-            get_acc(
-                model, 
-                tokenizer, 
-                tasks={k:v for k, v in TASK_CONFIG.items() if k in ['winogrande', 'arc_challenge', 'arc_easy', 'hellaswag']},
-                noise_scale=noise_scale
-            )
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

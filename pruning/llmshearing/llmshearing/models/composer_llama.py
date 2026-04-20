@@ -451,29 +451,27 @@ class LlamaAttention(nn.Module):
         
         self.d_model = cfg.d_model
         self.n_heads = cfg.n_heads
+        self.n_kv_heads = cfg.get('n_kv_heads', self.n_heads)
+        self.n_kv_groups = self.n_heads // self.n_kv_heads
         self.all_head_size = cfg.d_model
-        self.head_dim = self.d_model // self.n_heads 
+        self.head_dim = self.d_model // self.n_heads
         self.pruned_heads = set()
-        
+
         self.softmax_scale = cfg.get('softmax_scale')
         if self.softmax_scale is None:
             self.softmax_scale = 1 / math.sqrt(self.d_model / self.n_heads)
         self.attn_dropout_p = cfg.get('attn_pdrop')
-        
-        # self.Wqkv = nn.Linear(self.d_model, 3 * self.d_model, device=device, bias=False)
-        # for param init fn; enables shape based init of fused layers
-        # fuse_splits = (cfg.d_model, 2 * cfg.d_model)
-        # self.Wqkv._fused = (0, fuse_splits)  # type: ignore
+
         self.wq = nn.Linear(self.d_model, self.d_model, device=device, bias=False)
-        self.wk = nn.Linear(self.d_model, self.d_model, device=device, bias=False)
-        self.wv = nn.Linear(self.d_model, self.d_model, device=device, bias=False)
+        self.wk = nn.Linear(self.d_model, self.n_kv_heads * self.head_dim, device=device, bias=False)
+        self.wv = nn.Linear(self.d_model, self.n_kv_heads * self.head_dim, device=device, bias=False)
         
         self.attn_fn = flash_attn_fn if self.attn_impl == 'flash' else normal_attn_fn
 
         self.out_proj = nn.Linear(self.d_model, self.d_model, device=device, bias=False)
         self.out_proj._is_residual = True  # type: ignore
         
-        self.rotary_emb = LlamaRotaryEmbedding(self.head_dim)
+        self.rotary_emb = LlamaRotaryEmbedding(self.head_dim, base=cfg.get('rope_theta', 10000))
     
     def prune_params(self, zs_block):
         head_z = None; head_layer_z = None; hidden_z = None; qk_head_dim_z = None; vo_head_dim_z = None
@@ -518,50 +516,61 @@ class LlamaAttention(nn.Module):
                 self.wv.half()
                 self.out_proj.half()
          
-        to_prune_heads = turn_head_z(head_z, head_layer_z)
-        len_to_prune_heads = len(to_prune_heads)
-        if len_to_prune_heads == 0:
+        to_prune_kv_heads = turn_head_z(head_z, head_layer_z)
+        if len(to_prune_kv_heads) == 0:
             print(f"    Heads: {self.n_heads} -> {self.n_heads}")
             return
 
-        heads, index = find_pruneable_heads_and_indices(
-            to_prune_heads, self.n_heads, self.head_dim, self.pruned_heads
+        # KV indices (for wk, wv)
+        kv_heads, kv_index = find_pruneable_heads_and_indices(
+            to_prune_kv_heads, self.n_kv_heads, self.head_dim, self.pruned_heads
         )
-        
-        qk_index = index; vo_index = index
+
+        # Q indices: each KV head i → Q heads [i*g .. (i+1)*g)
+        g = self.n_kv_groups
+        to_prune_q_heads = [kv_h * g + offset
+                            for kv_h in to_prune_kv_heads
+                            for offset in range(g)]
+        q_pruned_set = {kv_h * g + offset
+                        for kv_h in self.pruned_heads
+                        for offset in range(g)}
+        q_heads, q_index = find_pruneable_heads_and_indices(
+            to_prune_q_heads, self.n_heads, self.head_dim, q_pruned_set
+        )
+
         if qk_head_dim_z is not None:
             remaining_qk_index = torch.where(~qk_head_dim_z.eq(0))[0]
             remaining_vo_index = torch.where(~vo_head_dim_z.eq(0))[0]
             import numpy as np
-            qk_index = torch.from_numpy(np.intersect1d(index.detach().cpu().numpy(), remaining_qk_index.detach().cpu().numpy())).to(index.device).to(index.dtype)
-            vo_index = torch.from_numpy(np.intersect1d(index.detach().cpu().numpy(), remaining_vo_index.detach().cpu().numpy())).to(index.device).to(index.dtype)
-            print(f"    QKVO dims: {len(hidden_z)} -> {len(qk_index)}")
-        
-        # Prune linear layers
-        # setting layers to be None if all the heads are pruned
-        if len(index) == 0:
+            q_index = torch.from_numpy(np.intersect1d(q_index.detach().cpu().numpy(), remaining_qk_index.detach().cpu().numpy())).to(q_index.device).to(q_index.dtype)
+            kv_index = torch.from_numpy(np.intersect1d(kv_index.detach().cpu().numpy(), remaining_vo_index.detach().cpu().numpy())).to(kv_index.device).to(kv_index.dtype)
+            print(f"    QKVO dims: {len(hidden_z)} -> {len(q_index)}")
+
+        # Prune linear layers; set to None if all heads are pruned
+        if len(kv_index) == 0:
             self.wq = None
             self.wk = None
             self.wv = None
             self.out_proj = None
         else:
             half = next(self.wq.parameters()).dtype == torch.float16
-            self.wq = prune_linear_layer(self.wq, qk_index)
-            self.wk = prune_linear_layer(self.wk, qk_index)
-            self.wv = prune_linear_layer(self.wv, vo_index)
-            self.out_proj = prune_linear_layer(self.out_proj, vo_index, dim=1)
+            self.wq = prune_linear_layer(self.wq, q_index)
+            self.wk = prune_linear_layer(self.wk, kv_index)
+            self.wv = prune_linear_layer(self.wv, kv_index)
+            self.out_proj = prune_linear_layer(self.out_proj, q_index, dim=1)
             if half:
                 self.wq.half()
                 self.wk.half()
                 self.wv.half()
                 self.out_proj.half()
 
-        print(f"    Heads: {self.n_heads} -> {self.n_heads - len(heads)}")
+        print(f"    Heads: {self.n_heads} -> {self.n_heads - len(q_heads)}")
 
-        # Update hyper params and store pruned heads
-        self.n_heads = self.n_heads - len(heads)
+        # Update hyper params and store pruned heads (tracked at KV level)
+        self.n_heads -= len(q_heads)
+        self.n_kv_heads -= len(kv_heads)
         self.all_head_size = self.head_dim * self.n_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
+        self.pruned_heads = self.pruned_heads.union(kv_heads)
             
     def forward(
         self,
@@ -603,9 +612,14 @@ class LlamaAttention(nn.Module):
 
         # b, s, d = query.shape
         query = rearrange(query, 'b s (h d) -> b h s d', h=self.n_heads)
-        key = rearrange(key, 'b s (h d) -> b h s d', h=self.n_heads)
-        value = rearrange(value, 'b s (h d) -> b h s d', h=self.n_heads)
-        
+        key = rearrange(key, 'b s (h d) -> b h s d', h=self.n_kv_heads)
+        value = rearrange(value, 'b s (h d) -> b h s d', h=self.n_kv_heads)
+
+        # Apply KV-head mask before GQA expansion so masked heads produce zero attention
+        if head_z is not None:
+            key = key * head_z.unsqueeze(-1)
+            value = value * head_z.unsqueeze(-1)
+
         kv_seq_len = key.size(2)
         offset = 0
         if past_key_value is not None:
@@ -621,6 +635,11 @@ class LlamaAttention(nn.Module):
                 key = torch.cat([past_key_value[0], key], dim=1)
                 value = torch.cat([past_key_value[1], value], dim=1)
                 past_key_value = (key, value)
+
+        # Expand K/V to full Q head count for GQA
+        if self.n_kv_groups > 1:
+            key = key.repeat_interleave(self.n_kv_groups, dim=1)
+            value = value.repeat_interleave(self.n_kv_groups, dim=1)
 
         if self.attn_fn == flash_attn_fn:
             query = rearrange(query, 'b h s d -> b s h d')
@@ -638,7 +657,7 @@ class LlamaAttention(nn.Module):
                 dropout_p=self.attn_dropout_p,
                 training=self.training,
                 needs_weights=needs_weights,
-                head_z=head_z
+                head_z=None  # head_z already applied to K/V before expansion
             )
         else:
             context = self.attn_fn(
@@ -646,7 +665,7 @@ class LlamaAttention(nn.Module):
                 key=key,
                 value=value,
                 attention_mask=attention_mask,
-                head_z=head_z
+                head_z=None  # head_z already applied to K/V before expansion
             )
             attn_weights = None
 
@@ -827,7 +846,14 @@ def flash_attn_fn(
     # value_unpad = rearrange(value_unpad, 'nnz (h d) -> nnz h d', h=n_heads)
 
     dropout_p = dropout_p if training else 0.0
-    
+
+    # FlashAttention only supports fp16 and bf16
+    # Convert tensors to appropriate dtype if needed
+    if query_unpad.dtype not in [torch.float16, torch.bfloat16]:
+        dtype = torch.bfloat16
+        query_unpad = query_unpad.to(dtype)
+        key_unpad = key_unpad.to(dtype)
+        value_unpad = value_unpad.to(dtype)
 
     output_unpad = flash_attn_varlen_func(
         q=query_unpad,

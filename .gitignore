@@ -11,6 +11,7 @@ checkpoints/
 datasets/
 !pruning/wanda/lm-evaluation-harness/lm_eval/datasets/
 !pruning/llmshearing/llmshearing/datasets
+pruning/llmshearing/llmshearing/data/redpajama/
 llm_weights/
 logs/
 outputs/

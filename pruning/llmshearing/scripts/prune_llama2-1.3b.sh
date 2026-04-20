@@ -146,4 +146,4 @@ srun torchrun \
     train_loader.num_workers=0 \
     train_loader.prefetch_factor=null \
     train_loader.persistent_workers=false \
-    autoresume=false
+    autoresume=true

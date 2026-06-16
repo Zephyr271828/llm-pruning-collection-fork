@@ -256,7 +256,7 @@ Note: The results are obtained by running the exact pruning and evaluation scrip
 ## Citation
 If you find this repository helpful, please consider citing:
 ```bibtex
-@article{llm-pruning,
+@article{xu2026llmpruning,
   title={Small LLMs: Pruning vs. Training from Scratch},
   author={Xu, Yufeng and Lu, Taiming and Li, Kunjun, and Zhu, Jiachen and Sun, Mingjie and Liu, Zhuang},
   journal={arXiv preprint arXiv:2606.14150},

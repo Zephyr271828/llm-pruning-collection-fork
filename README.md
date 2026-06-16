@@ -252,3 +252,14 @@ Llama-2-7b-hf:
 | Ours  | Block   | Vector    | 20.4 | 62.2 | 74.1 | 64.4 | 62.6 | 58.8 | 35.7 | 40.8 | 
 
 Note: The results are obtained by running the exact pruning and evaluation scripts from the LLM-Pruner repo. Still, some results differ the reported results in the paper. My conjecture is that only 10 samples are randomly selected from the bookcorpus dataset for importance estimation, and this caused some randomness, even though we fixed the random seed.
+
+## Citation
+If you find this repository helpful, please consider citing:
+```
+@article{llm-pruning,
+  title={Small LLMs: Pruning vs. Training from Scratch},
+  author={Xu, Yufeng and Lu, Taiming and Li, Kunjun, and Zhu, Jiachen and Sun, Mingjie and Liu, Zhuang},
+  journal={arXiv preprint arXiv:2606.14150},
+  year={2026}
+}
+```

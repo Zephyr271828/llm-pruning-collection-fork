@@ -1,8 +1,8 @@
 # Small LLMs: Pruning vs Training from Scratch
 
-[Yufeng Xu<sup>1</sup>](https://github.com/Zephyr271828), [Taiming Lu<sup>1</sup>](https://taiminglu.com/), [Jiachen Zhu<sup>2</sup>](https://jiachenzhu.github.io/), [Mingjie Sun<sup>3</sup>](https://eric-mingjie.github.io/), [Kunjun Li<sup>1</sup>](https://kunjun-li.github.io/), and [Zhuang Liu<sup>1</sup>](https://liuzhuang13.github.io/)
+[Yufeng Xu<sup>1</sup>](https://github.com/Zephyr271828), [Taiming Lu<sup>1</sup>](https://taiminglu.com/), [Kunjun Li<sup>1</sup>](https://kunjun-li.github.io/),[Jiachen Zhu<sup>2</sup>](https://jiachenzhu.github.io/), [Mingjie Sun<sup>3</sup>](https://eric-mingjie.github.io/) and [Zhuang Liu<sup>1</sup>](https://liuzhuang13.github.io/)
 
-1 Princeton. 2 NYU. 3 CMU.  
+1 Princeton. 2 NYU. 3 CMU. [[arXiv](https://arxiv.org/abs/2606.14150)]
 
 ---
 
